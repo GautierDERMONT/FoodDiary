@@ -4,7 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.fooddiary.screens.HomeScreen  // Importez votre écran
+import com.fooddiary.screens.HomeScreen
 import com.fooddiary.ui.theme.FoodDiaryTheme
 
 class MainActivity : ComponentActivity() {
