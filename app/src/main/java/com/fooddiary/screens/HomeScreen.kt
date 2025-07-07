@@ -1,95 +1,277 @@
 package com.fooddiary.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.fooddiary.model.MealType  // Vérifiez le chemin exact
-import com.fooddiary.viewmodel.MealViewModel  // Vérifiez le chemin exact
+import com.fooddiary.viewmodel.MealViewModel
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.res.painterResource
+import com.fooddiary.R
+import androidx.compose.ui.unit.dp
 
 @Composable
-fun HomeScreen(viewModel: MealViewModel = viewModel()) {
+fun HomeScreen(
+    viewModel: MealViewModel = viewModel(),
+    onMealClick: (String, Int) -> Unit = { _, _ -> }
+) {
     val jours = viewModel.weekDays
+    val weekMeals by viewModel.weekMeals.collectAsState()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(12.dp)
-            .verticalScroll(rememberScrollState()),
+            .padding(horizontal = 16.dp)
+            .padding(top = 60.dp), // Ajustez cette valeur pour le positionnement vertical
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("FoodDiary", style = MaterialTheme.typography.headlineMedium)
-        Text("Aperçu hebdomadaire", style = MaterialTheme.typography.titleMedium)
+        Text("FoodDiary", style = MaterialTheme.typography.headlineLarge)
+        Spacer(Modifier.height(10.dp))
+        Text("Aperçu hebdomadaire", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(24.dp))
 
-        Spacer(Modifier.height(16.dp))
+        // Ligne d'images/boutons
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp), // Réduire le padding horizontal initial
+            horizontalArrangement = Arrangement.SpaceBetween // Changer à SpaceBetween
+        ) {
+            // Bouton Export
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp), // Ajouter un padding horizontal
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = CircleShape
+                        )
+                        .clickable { /* Action export */ }
+                        .padding(8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_export),
+                        contentDescription = "Export",
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                Text("Export", style = MaterialTheme.typography.labelSmall)
+            }
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-            jours.forEach { jour ->
-                Text(jour, fontWeight = FontWeight.Bold)
+            // Bouton Recap
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp), // Ajouter un padding horizontal
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = CircleShape
+                        )
+                        .clickable { /* Action recap */ }
+                        .padding(8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_recap),
+                        contentDescription = "Recap",
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                Text("Recap", style = MaterialTheme.typography.labelSmall)
+            }
+
+            // Bouton Reset
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp), // Ajouter un padding horizontal
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = CircleShape
+                        )
+                        .clickable { /* Action reset */ }
+                        .padding(8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_reset),
+                        contentDescription = "Reset",
+                        modifier = Modifier.size(50.dp)
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                Text("Reset", style = MaterialTheme.typography.labelSmall)
             }
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(16.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(2.dp)
+                .padding(horizontal = 32.dp)
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            MaterialTheme.colorScheme.primary,
+                            Color.Transparent
+                        )
+                    ),
+                    shape = RoundedCornerShape(50)
+                )
+        )
 
-        for (i in MealType.values().indices) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceAround
+        Spacer(Modifier.height(24.dp))
+
+        // Conteneur principal avec défilement
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 8.dp)
             ) {
-                jours.forEach { jour ->
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(Color.LightGray, CircleShape)
-                            .clickable { },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("🍽")
+                // Ligne des jours
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    jours.forEach { jour ->
+                        Box(
+                            modifier = Modifier.width(40.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(jour, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // Ligne des repas (vierges)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    weekMeals.forEachIndexed { dayIndex, dayMeals ->
+                        Column(
+                            modifier = Modifier.width(40.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            dayMeals.meals.forEachIndexed { mealIndex, _ ->
+                                if (mealIndex > 0) Spacer(Modifier.height(12.dp))
+
+                                ClickableMealBox(
+                                    onClick = { onMealClick(dayMeals.day, mealIndex) }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // Boutons +/-
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    jours.forEachIndexed { index, jour ->
+                        Box(
+                            modifier = Modifier.width(40.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                IconButton(
+                                    onClick = { viewModel.addEmptyMeal(jour) },
+                                    modifier = Modifier.size(24.dp),
+                                    enabled = weekMeals[index].meals.size < 8 // Désactiver quand on atteint 8 repas
+                                ) {
+                                    Icon(
+                                        Icons.Default.Add,
+                                        "Ajouter",
+                                        tint = if (weekMeals[index].meals.size < 8) Color.Gray else Color.LightGray
+                                    )
+                                }
+
+                                Divider(
+                                    modifier = Modifier
+                                        .width(24.dp)
+                                        .height(1.dp),
+                                    color = Color.LightGray
+                                )
+
+                                IconButton(
+                                    onClick = {
+                                        if (weekMeals[index].meals.size > 1) {
+                                            viewModel.removeMeal(jour, weekMeals[index].meals.lastIndex) // Correction ici
+                                        }
+                                    },
+                                    modifier = Modifier.size(24.dp),
+                                    enabled = weekMeals[index].meals.size > 1
+                                ) {
+                                    Icon(
+                                        Icons.Default.Remove,
+                                        "Supprimer",
+                                        tint = if (weekMeals[index].meals.size > 1) Color.Gray else Color.LightGray
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+}
 
-        Spacer(Modifier.height(12.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceAround
-        ) {
-            jours.forEach { _ ->
-                Button(
-                    onClick = { },
-                    shape = CircleShape,
-                    modifier = Modifier.size(36.dp),
-                    contentPadding = PaddingValues(0.dp)
-                ) {
-                    Text("+")
-                }
-            }
-        }
+@Composable
+fun ClickableMealBox(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
+            .background(Color.White)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .clip(CircleShape)
+                .border(2.dp, Color.LightGray, CircleShape) // Ajout de la bordure grise
+                .background(Color.White) // Fond blanc au lieu de gris
+        )
     }
 }
