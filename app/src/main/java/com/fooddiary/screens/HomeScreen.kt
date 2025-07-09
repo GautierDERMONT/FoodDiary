@@ -1,33 +1,33 @@
 package com.fooddiary.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.fooddiary.viewmodel.MealViewModel
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.ui.res.painterResource
+import androidx.navigation.NavController
 import com.fooddiary.R
-import androidx.compose.ui.unit.dp
+import com.fooddiary.model.Meal
+import com.fooddiary.model.MealType
+import com.fooddiary.viewmodel.MealViewModel
 
 @Composable
 fun HomeScreen(
@@ -36,12 +36,13 @@ fun HomeScreen(
 ) {
     val jours = viewModel.weekDays
     val weekMeals by viewModel.weekMeals.collectAsState()
+    val canRemove by viewModel.canRemoveVierge.collectAsState()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp)
-            .padding(top = 60.dp), // Ajustez cette valeur pour le positionnement vertical
+            .padding(top = 60.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text("FoodDiary", style = MaterialTheme.typography.headlineLarge)
@@ -49,82 +50,84 @@ fun HomeScreen(
         Text("Aperçu hebdomadaire", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(24.dp))
 
-        // Ligne d'images/boutons
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp), // Réduire le padding horizontal initial
-            horizontalArrangement = Arrangement.SpaceBetween // Changer à SpaceBetween
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Bouton Export
             Column(
-                modifier = Modifier.padding(horizontal = 16.dp), // Ajouter un padding horizontal
+                modifier = Modifier.padding(horizontal = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
-            ) {Box(
+            ) {
+                Box(
                     modifier = Modifier
                         .size(48.dp)
                         .background(
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             shape = CircleShape
                         )
-                        .clickable { /* Action export */ }
+                        .clickable { }
                         .padding(8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
                         painter = painterResource(id = R.drawable.ic_export),
                         contentDescription = "Export",
-                        modifier = Modifier.size(30.dp)
+                        modifier = Modifier.size(30.dp),
+                        contentScale = ContentScale.Fit
                     )
                 }
                 Spacer(Modifier.height(4.dp))
                 Text("Export", style = MaterialTheme.typography.labelSmall)
             }
 
-            // Bouton Recap
             Column(
-                modifier = Modifier.padding(horizontal = 16.dp), // Ajouter un padding horizontal
+                modifier = Modifier.padding(horizontal = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
-            ) {Box(
+            ) {
+                Box(
                     modifier = Modifier
                         .size(48.dp)
                         .background(
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             shape = CircleShape
                         )
-                        .clickable { /* Action recap */ }
+                        .clickable { }
                         .padding(8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
                         painter = painterResource(id = R.drawable.ic_recap),
                         contentDescription = "Recap",
-                        modifier = Modifier.size(30.dp)
+                        modifier = Modifier.size(30.dp),
+                        contentScale = ContentScale.Fit
                     )
                 }
                 Spacer(Modifier.height(4.dp))
                 Text("Recap", style = MaterialTheme.typography.labelSmall)
             }
 
-            // Bouton Reset
             Column(
-                modifier = Modifier.padding(horizontal = 16.dp), // Ajouter un padding horizontal
+                modifier = Modifier.padding(horizontal = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
-            ) {Box(
+            ) {
+                Box(
                     modifier = Modifier
                         .size(48.dp)
                         .background(
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             shape = CircleShape
                         )
-                        .clickable { /* Action reset */ }
+                        .clickable { viewModel.clearAllData() }
                         .padding(8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
                         painter = painterResource(id = R.drawable.ic_reset),
                         contentDescription = "Reset",
-                        modifier = Modifier.size(50.dp)
+                        modifier = Modifier.size(50.dp),
+                        contentScale = ContentScale.Fit
                     )
                 }
                 Spacer(Modifier.height(4.dp))
@@ -152,7 +155,6 @@ fun HomeScreen(
 
         Spacer(Modifier.height(24.dp))
 
-        // Conteneur principal avec défilement
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -161,7 +163,6 @@ fun HomeScreen(
             Column(
                 modifier = Modifier.padding(horizontal = 8.dp)
             ) {
-                // Ligne des jours
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -178,7 +179,6 @@ fun HomeScreen(
 
                 Spacer(Modifier.height(8.dp))
 
-                // Ligne des repas (vierges)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -188,10 +188,10 @@ fun HomeScreen(
                             modifier = Modifier.width(40.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            dayMeals.meals.forEachIndexed { mealIndex, _ ->
+                            dayMeals.meals.forEachIndexed { mealIndex, meal ->
                                 if (mealIndex > 0) Spacer(Modifier.height(12.dp))
-
                                 ClickableMealBox(
+                                    meal = meal,
                                     onClick = { onMealClick(dayMeals.day, mealIndex) }
                                 )
                             }
@@ -201,7 +201,6 @@ fun HomeScreen(
 
                 Spacer(Modifier.height(16.dp))
 
-                // Boutons +/-
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -215,12 +214,15 @@ fun HomeScreen(
                                 IconButton(
                                     onClick = { viewModel.addEmptyMeal(jour) },
                                     modifier = Modifier.size(24.dp),
-                                    enabled = weekMeals[index].meals.size < 8 // Désactiver quand on atteint 8 repas
+                                    enabled = weekMeals[index].meals.size < 8
                                 ) {
                                     Icon(
                                         Icons.Default.Add,
                                         "Ajouter",
-                                        tint = if (weekMeals[index].meals.size < 8) Color.Gray else Color.LightGray
+                                        tint = if (weekMeals[index].meals.size < 8)
+                                            MaterialTheme.colorScheme.primary
+                                        else
+                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                                     )
                                 }
 
@@ -232,18 +234,17 @@ fun HomeScreen(
                                 )
 
                                 IconButton(
-                                    onClick = {
-                                        if (weekMeals[index].meals.size > 1) {
-                                            viewModel.removeMeal(jour, weekMeals[index].meals.lastIndex) // Correction ici
-                                        }
-                                    },
+                                    onClick = { viewModel.removeLastViergeMeal(jour) },
                                     modifier = Modifier.size(24.dp),
-                                    enabled = weekMeals[index].meals.size > 1
+                                    enabled = canRemove[jour] == true
                                 ) {
                                     Icon(
                                         Icons.Default.Remove,
-                                        "Supprimer",
-                                        tint = if (weekMeals[index].meals.size > 1) Color.Gray else Color.LightGray
+                                        "Supprimer repas vierge",
+                                        tint = if (canRemove[jour] == true)
+                                            MaterialTheme.colorScheme.primary
+                                        else
+                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                                     )
                                 }
                             }
@@ -256,7 +257,18 @@ fun HomeScreen(
 }
 
 @Composable
-fun ClickableMealBox(onClick: () -> Unit) {
+fun ClickableMealBox(
+    meal: Meal,
+    onClick: () -> Unit
+) {
+    val iconRes = when (meal.type) {
+        MealType.BREAKFAST -> R.drawable.croissant
+        MealType.LUNCH -> R.drawable.dish
+        MealType.DINNER -> R.drawable.moon
+        MealType.SNACK -> R.drawable.apple
+        MealType.CUSTOM -> R.drawable.star
+    }
+
     Box(
         modifier = Modifier
             .size(40.dp)
@@ -266,12 +278,21 @@ fun ClickableMealBox(onClick: () -> Unit) {
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .size(12.dp)
-                .clip(CircleShape)
-                .border(2.dp, Color.LightGray, CircleShape) // Ajout de la bordure grise
-                .background(Color.White) // Fond blanc au lieu de gris
-        )
+        if (meal.description.isBlank()) {
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .clip(CircleShape)
+                    .border(2.dp, Color.LightGray, CircleShape)
+                    .background(Color.White)
+            )
+        } else {
+            Image(
+                painter = painterResource(id = iconRes),
+                contentDescription = meal.type.name,
+                modifier = Modifier.size(24.dp),
+                contentScale = ContentScale.Fit
+            )
+        }
     }
 }
