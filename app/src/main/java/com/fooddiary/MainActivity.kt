@@ -5,7 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.compose.NavHost
@@ -13,6 +13,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.fooddiary.screens.AddMealScreen
 import com.fooddiary.screens.HomeScreen
+import com.fooddiary.screens.MealDetailScreen
 import com.fooddiary.ui.theme.FoodDiaryTheme
 import com.fooddiary.viewmodel.MealViewModel
 
@@ -40,6 +41,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun FoodDiaryApp(viewModel: MealViewModel) {
     val navController = rememberNavController()
+    val weekMealsState = viewModel.weekMeals.collectAsState()
 
     NavHost(
         navController = navController,
@@ -49,14 +51,38 @@ fun FoodDiaryApp(viewModel: MealViewModel) {
             HomeScreen(
                 viewModel = viewModel,
                 onMealClick = { day, mealIndex ->
-                    navController.navigate("addMeal/$day/$mealIndex")
+                    val dayMeals = weekMealsState.value.find { it.day == day }
+                    val meal = dayMeals?.meals?.getOrNull(mealIndex)
+
+                    if (meal != null) {
+                        if (meal.description.isBlank() && meal.photoUri == null) {
+                            navController.navigate("addMeal/$day/$mealIndex")
+                        } else {
+                            navController.navigate("mealDetail/$day/$mealIndex")
+                        }
+                    }
                 }
             )
         }
+
         composable("addMeal/{day}/{mealIndex}") { backStackEntry ->
             val day = backStackEntry.arguments?.getString("day") ?: ""
             val mealIndex = backStackEntry.arguments?.getString("mealIndex")?.toIntOrNull() ?: 0
             AddMealScreen(
+                navController = navController,
+                day = day,
+                mealIndex = mealIndex,
+                viewModel = viewModel
+            )
+        }
+
+        composable("mealDetail/{day}/{mealIndex}") { backStackEntry ->
+            val day = backStackEntry.arguments?.getString("day") ?: ""
+            val mealIndex = backStackEntry.arguments?.getString("mealIndex")?.toIntOrNull() ?: 0
+            val dayMeals = weekMealsState.value.find { it.day == day }
+            val meal = dayMeals?.meals?.getOrNull(mealIndex)
+
+            MealDetailScreen(
                 navController = navController,
                 day = day,
                 mealIndex = mealIndex,

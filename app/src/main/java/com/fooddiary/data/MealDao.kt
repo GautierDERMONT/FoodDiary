@@ -11,6 +11,12 @@ interface MealDao {
     @Query("SELECT * FROM meals WHERE day = :day ORDER BY mealIndex")
     fun getMealsByDay(day: String): Flow<List<MealEntity>>
 
+    @Query("DELETE FROM meals WHERE mealIndex >= 3")
+    suspend fun deleteAllExtraMeals()
+
+    @Query("DELETE FROM meals WHERE day = :day AND mealIndex > 2 AND description = '' AND photoUri IS NULL")
+    suspend fun cleanExtraViergeMeals(day: String)
+
     @Query("DELETE FROM meals WHERE day = :day AND mealIndex = :mealIndex AND description = '' AND photoUri IS NULL")
     suspend fun deleteViergeMeal(day: String, mealIndex: Int)
 

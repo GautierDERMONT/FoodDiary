@@ -15,18 +15,18 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavController
 import com.fooddiary.R
 import com.fooddiary.model.Meal
 import com.fooddiary.model.MealType
+import com.fooddiary.utils.getCurrentDayShort
 import com.fooddiary.viewmodel.MealViewModel
 
 @Composable
@@ -34,6 +34,7 @@ fun HomeScreen(
     viewModel: MealViewModel = viewModel(),
     onMealClick: (String, Int) -> Unit = { _, _ -> }
 ) {
+    val currentDay = remember { getCurrentDayShort() }
     val jours = viewModel.weekDays
     val weekMeals by viewModel.weekMeals.collectAsState()
     val canRemove by viewModel.canRemoveVierge.collectAsState()
@@ -169,31 +170,64 @@ fun HomeScreen(
                 ) {
                     jours.forEach { jour ->
                         Box(
-                            modifier = Modifier.width(40.dp),
+                            modifier = Modifier
+                                .width(48.dp)
+                                .background(
+                                    if (jour == currentDay) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                    else Color.Transparent,
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .border(
+                                    2.dp,
+                                    if (jour == currentDay) MaterialTheme.colorScheme.primary
+                                    else Color.Transparent,
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .padding(4.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(jour, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                jour,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (jour == currentDay) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface
+                            )
                         }
                     }
                 }
 
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(16.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    weekMeals.forEachIndexed { dayIndex, dayMeals ->
-                        Column(
-                            modifier = Modifier.width(40.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            dayMeals.meals.forEachIndexed { mealIndex, meal ->
-                                if (mealIndex > 0) Spacer(Modifier.height(12.dp))
-                                ClickableMealBox(
-                                    meal = meal,
-                                    onClick = { onMealClick(dayMeals.day, mealIndex) }
+                    weekMeals.forEach { dayMeals ->
+                        Box(
+                            modifier = Modifier
+                                .width(48.dp)
+                                .background(
+                                    if (dayMeals.day == currentDay) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+                                    else Color.Transparent,
+                                    RoundedCornerShape(8.dp)
                                 )
+                                .border(
+                                    1.dp,
+                                    if (dayMeals.day == currentDay) MaterialTheme.colorScheme.primary
+                                    else Color.Transparent,
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .padding(4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                dayMeals.meals.forEachIndexed { index, meal ->
+                                    if (index > 0) Spacer(Modifier.height(12.dp))
+                                    ClickableMealBox(
+                                        meal = meal,
+                                        onClick = { onMealClick(dayMeals.day, index) }
+                                    )
+                                }
                             }
                         }
                     }
@@ -207,7 +241,7 @@ fun HomeScreen(
                 ) {
                     jours.forEachIndexed { index, jour ->
                         Box(
-                            modifier = Modifier.width(40.dp),
+                            modifier = Modifier.width(48.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -226,12 +260,7 @@ fun HomeScreen(
                                     )
                                 }
 
-                                Divider(
-                                    modifier = Modifier
-                                        .width(24.dp)
-                                        .height(1.dp),
-                                    color = Color.LightGray
-                                )
+                                Divider(modifier = Modifier.width(24.dp).height(1.dp))
 
                                 IconButton(
                                     onClick = { viewModel.removeLastViergeMeal(jour) },
@@ -261,12 +290,16 @@ fun ClickableMealBox(
     meal: Meal,
     onClick: () -> Unit
 ) {
-    val iconRes = when (meal.type) {
-        MealType.BREAKFAST -> R.drawable.croissant
-        MealType.LUNCH -> R.drawable.dish
-        MealType.DINNER -> R.drawable.moon
-        MealType.SNACK -> R.drawable.apple
-        MealType.CUSTOM -> R.drawable.star
+    val iconRes by remember(meal.type) {
+        derivedStateOf {
+            when (meal.type) {
+                MealType.BREAKFAST -> R.drawable.croissant
+                MealType.LUNCH -> R.drawable.dish
+                MealType.DINNER -> R.drawable.moon
+                MealType.SNACK -> R.drawable.apple
+                MealType.CUSTOM -> R.drawable.star
+            }
+        }
     }
 
     Box(
@@ -278,7 +311,7 @@ fun ClickableMealBox(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        if (meal.description.isBlank()) {
+        if (meal.isVierge()) {
             Box(
                 modifier = Modifier
                     .size(12.dp)
@@ -290,9 +323,7 @@ fun ClickableMealBox(
             Image(
                 painter = painterResource(id = iconRes),
                 contentDescription = meal.type.name,
-                modifier = Modifier.size(24.dp),
-                contentScale = ContentScale.Fit
-            )
+                modifier = Modifier.size(24.dp))
         }
     }
 }

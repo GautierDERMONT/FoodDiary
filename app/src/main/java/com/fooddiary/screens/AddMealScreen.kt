@@ -5,9 +5,6 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -15,6 +12,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.*
@@ -28,12 +28,14 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.navigation.NavController
-import coil.compose.rememberImagePainter
+import coil.compose.rememberAsyncImagePainter
 import com.fooddiary.R
 import com.fooddiary.model.Meal
 import com.fooddiary.model.MealType
 import com.fooddiary.viewmodel.MealViewModel
 import java.io.File
+import java.io.FileOutputStream
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,26 +45,89 @@ fun AddMealScreen(
     mealIndex: Int,
     viewModel: MealViewModel
 ) {
-    var selectedMealType by remember { mutableStateOf<MealType?>(null) }
-    var description by remember { mutableStateOf("") }
-    var notes by remember { mutableStateOf("") }
-    var photoUri by remember { mutableStateOf<Uri?>(null) }
+    val existingMeal by remember(day, mealIndex) {
+        derivedStateOf {
+            viewModel.weekMeals.value
+                .find { it.day == day }
+                ?.meals?.getOrNull(mealIndex)
+        }
+    }
+
+    val isEditMode = existingMeal != null
+    var selectedMealType by remember {
+        mutableStateOf(
+            if (isEditMode) existingMeal?.type
+            else null
+        )
+    }
+    var description by remember { mutableStateOf(existingMeal?.description ?: "") }
+    var notes by remember { mutableStateOf(existingMeal?.notes ?: "") }
+    var photoUri by remember { mutableStateOf<Uri?>(existingMeal?.photoUri?.let { Uri.parse(it) }) }
     var showPhotoPicker by remember { mutableStateOf(false) }
     var showErrorDialog by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
     val context = LocalContext.current
 
-    val galleryLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let { photoUri = it }
+    val title = if (isEditMode) "Modifier le repas" else "Ajouter un repas"
+    val buttonText = if (isEditMode) "Mettre à jour" else "Enregistrer"
+
+    fun isUriValid(context: Context, uriString: String?): Boolean {
+        if (uriString == null) return false
+        return try {
+            val uri = Uri.parse(uriString)
+            context.contentResolver.openInputStream(uri) != null
+        } catch (e: Exception) {
+            false
+        }
     }
+
+    fun copyImageToAppStorage(context: Context, uri: Uri): Uri {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(uri) ?: return uri
+            val imagesDir = File(context.filesDir, "images").apply { mkdirs() }
+            val outputFile = File(imagesDir, "img_${System.currentTimeMillis()}.jpg")
+
+            inputStream.use { input ->
+                FileOutputStream(outputFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+
+            FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                outputFile
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+            uri // Retourne l'URI original en cas d'erreur
+        }
+    }
+
+
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri: Uri? ->
+            uri?.let {
+                try {
+                    val copiedUri = copyImageToAppStorage(context, it)
+                    photoUri = copiedUri
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    photoUri = uri // Utilise l'URI original si la copie échoue
+                }
+            }
+        }
+    )
 
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
         if (success) photoUri?.let { }
     }
+
+
 
     fun takePhoto() {
         val uri = createImageUri(context)
@@ -80,8 +145,8 @@ fun AddMealScreen(
                 errorMessage = "Veuillez saisir une description"
                 false
             }
-            photoUri == null -> {
-                errorMessage = "Veuillez ajouter une photo"
+            photoUri == null || !isUriValid(context, photoUri.toString()) -> {
+                errorMessage = "Veuillez ajouter une photo valide"
                 false
             }
             else -> true
@@ -136,7 +201,7 @@ fun AddMealScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Ajouter un repas", style = MaterialTheme.typography.titleLarge) },
+                title = { Text(title, style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, "Retour")
@@ -202,9 +267,9 @@ fun AddMealScreen(
                         .clickable { showPhotoPicker = true },
                     contentAlignment = Alignment.Center
                 ) {
-                    if (photoUri != null) {
+                    if (photoUri != null && isUriValid(context, photoUri.toString())) {
                         Image(
-                            painter = rememberImagePainter(photoUri),
+                            painter = rememberAsyncImagePainter(photoUri),
                             contentDescription = "Photo du repas",
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
@@ -255,12 +320,9 @@ fun AddMealScreen(
                             val meal = Meal(
                                 type = selectedMealType!!,
                                 description = description,
-                                photoUri = photoUri?.toString()
-                            ).apply {
-                                if (notes.isNotBlank()) {
-                                    this.description += "\n\nRemarques: $notes"
-                                }
-                            }
+                                photoUri = photoUri?.toString(),
+                                notes = notes.takeIf { it.isNotBlank() }
+                            )
                             viewModel.updateMeal(day, mealIndex, meal)
                             navController.popBackStack()
                         } else {
@@ -272,7 +334,7 @@ fun AddMealScreen(
                         .height(50.dp),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("Enregistrer", style = MaterialTheme.typography.bodyLarge)
+                    Text(buttonText, style = MaterialTheme.typography.bodyLarge)
                 }
             }
         }
@@ -331,7 +393,7 @@ fun MealTypeOption(
 }
 
 private fun createImageUri(context: Context): Uri {
-    val imagesDir = File(context.cacheDir, "images").apply { mkdirs() }
+    val imagesDir = File(context.filesDir, "images").apply { mkdirs() }
     val imageFile = File(imagesDir, "meal_${System.currentTimeMillis()}.jpg")
     return FileProvider.getUriForFile(
         context,
