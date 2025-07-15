@@ -98,7 +98,7 @@ fun MealDetailScreen(
                                     MealType.LUNCH -> "Déjeuner"
                                     MealType.DINNER -> "Dîner"
                                     MealType.SNACK -> "Collation"
-                                    MealType.CUSTOM -> "Repas"
+                                    MealType.CUSTOM -> "Autre"
                                 },
                                 style = MaterialTheme.typography.titleLarge
                             )

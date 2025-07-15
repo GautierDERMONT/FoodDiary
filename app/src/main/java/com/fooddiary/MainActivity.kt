@@ -14,6 +14,7 @@ import androidx.navigation.compose.rememberNavController
 import com.fooddiary.screens.AddMealScreen
 import com.fooddiary.screens.HomeScreen
 import com.fooddiary.screens.MealDetailScreen
+import com.fooddiary.screens.DayMealsScreen
 import com.fooddiary.ui.theme.FoodDiaryTheme
 import com.fooddiary.viewmodel.MealViewModel
 
@@ -61,7 +62,11 @@ fun FoodDiaryApp(viewModel: MealViewModel) {
                             navController.navigate("mealDetail/$day/$mealIndex")
                         }
                     }
+                },
+                        onDayClick = { day ->
+                    navController.navigate("dayMeals/$day")
                 }
+
             )
         }
 
@@ -72,6 +77,16 @@ fun FoodDiaryApp(viewModel: MealViewModel) {
                 navController = navController,
                 day = day,
                 mealIndex = mealIndex,
+                viewModel = viewModel
+            )
+        }
+
+
+        composable("dayMeals/{day}") { backStackEntry ->
+            val day = backStackEntry.arguments?.getString("day") ?: ""
+            DayMealsScreen(
+                navController = navController,
+                day = day,
                 viewModel = viewModel
             )
         }

@@ -32,7 +32,8 @@ import com.fooddiary.viewmodel.MealViewModel
 @Composable
 fun HomeScreen(
     viewModel: MealViewModel = viewModel(),
-    onMealClick: (String, Int) -> Unit = { _, _ -> }
+    onMealClick: (String, Int) -> Unit = { _, _ -> },
+    onDayClick: (String) -> Unit = { _ -> }
 ) {
     val currentDay = remember { getCurrentDayShort() }
     val jours = viewModel.weekDays
@@ -183,7 +184,11 @@ fun HomeScreen(
                                     else Color.Transparent,
                                     RoundedCornerShape(8.dp)
                                 )
-                                .padding(4.dp),
+                                .padding(4.dp)
+                                .clickable {
+                                    // Naviguer vers l'écran des repas du jour
+                                    onDayClick(jour)
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
