@@ -27,6 +27,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -34,11 +36,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -51,7 +55,110 @@ import com.fooddiary.utils.getFormattedDate
 import com.fooddiary.viewmodel.MealViewModel
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.FloatingActionButton
+import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DayMealsScreen(
+    navController: NavController,
+    day: String,
+    viewModel: MealViewModel
+) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    val weekMeals by viewModel.weekMeals.collectAsStateWithLifecycle()
+    val filteredMeals = weekMeals
+        .find { it.day == day }
+        ?.meals
+        ?.filterNot { it.description.isBlank() && it.photoUri == null }
+        ?: emptyList()
+
+    val fullDate = getFormattedDate(day)
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Repas du $fullDate") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Retour")
+                    }
+                }
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = {
+                    if (filteredMeals.size < 8) {
+                        viewModel.addEmptyMeal(day)
+                        val newIndex = (filteredMeals.maxByOrNull { it.mealIndex }?.mealIndex ?: 0) + 1
+                        navController.navigate("addMeal/$day/$newIndex")
+                    } else {
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar(
+                                "Maximum de 8 repas atteint pour ce jour"
+                            )
+                        }
+                    }
+                },
+                modifier = Modifier.size(64.dp),
+                containerColor = if (filteredMeals.size < 8)
+                    MaterialTheme.colorScheme.primary
+                else
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                content = {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "Ajouter un repas",
+                        modifier = Modifier.size(32.dp),
+                        tint = if (filteredMeals.size < 8)
+                            MaterialTheme.colorScheme.onPrimary
+                        else
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    )
+                }
+            )
+        },
+        content = { innerPadding ->
+            if (filteredMeals.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Aucun repas enregistré pour ce jour")
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    items(filteredMeals) { meal ->
+                        MealCard(
+                            meal = meal,
+                            onClick = {
+                                navController.navigate("mealDetail/$day/${meal.mealIndex}")
+                            },
+                            onEdit = {
+                                navController.navigate("addMeal/$day/${meal.mealIndex}")
+                            },
+                            onDelete = {
+                                viewModel.deleteMeal(day, meal.mealIndex)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    )
+}
 
 @Composable
 fun MealCard(meal: Meal, onClick: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
@@ -204,87 +311,4 @@ fun MealCard(meal: Meal, onClick: () -> Unit, onEdit: () -> Unit, onDelete: () -
             }
         }
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DayMealsScreen(
-    navController: NavController,
-    day: String,
-    viewModel: MealViewModel
-) {
-    val weekMeals by viewModel.weekMeals.collectAsStateWithLifecycle()
-    val filteredMeals = weekMeals
-        .find { it.day == day }
-        ?.meals
-        ?.filterNot { it.description.isBlank() && it.photoUri == null }
-        ?: emptyList()
-
-    val fullDate = getFormattedDate(day)
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Repas du $fullDate") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Retour")
-                    }
-                }
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    viewModel.addEmptyMeal(day)
-                    val newIndex = (filteredMeals.maxByOrNull { it.mealIndex }?.mealIndex ?: 0) + 1
-                    navController.navigate("addMeal/$day/$newIndex")
-                },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(64.dp)
-            ) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = "Ajouter un repas",
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-        },
-        content = { innerPadding ->
-            if (filteredMeals.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("Aucun repas enregistré pour ce jour")
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    items(filteredMeals) { meal ->
-                        MealCard(
-                            meal = meal,
-                            onClick = {
-                                navController.navigate("mealDetail/$day/${meal.mealIndex}")
-                            },
-                            onEdit = {
-                                navController.navigate("addMeal/$day/${meal.mealIndex}")
-                            },
-                            onDelete = {
-                                viewModel.deleteMeal(day, meal.mealIndex)
-                            }
-                        )
-                    }
-                }
-            }
-        }
-    )
 }

@@ -16,6 +16,7 @@ import com.fooddiary.screens.HomeScreen
 import com.fooddiary.screens.MealDetailScreen
 import com.fooddiary.screens.DayMealsScreen
 import com.fooddiary.ui.theme.FoodDiaryTheme
+import com.fooddiary.screens.RecapScreen
 import com.fooddiary.viewmodel.MealViewModel
 
 class MainActivity : ComponentActivity() {
@@ -65,8 +66,17 @@ fun FoodDiaryApp(viewModel: MealViewModel) {
                 },
                         onDayClick = { day ->
                     navController.navigate("dayMeals/$day")
-                }
+                },
+                        onRecapClick = {
+                            navController.navigate("recap")
+                        }
+            )
+        }
 
+        composable("recap") {
+            RecapScreen(
+                navController = navController,
+                viewModel = viewModel
             )
         }
 
@@ -104,5 +114,7 @@ fun FoodDiaryApp(viewModel: MealViewModel) {
                 viewModel = viewModel
             )
         }
+
+
     }
 }

@@ -1,30 +1,37 @@
 package com.fooddiary.screens
 
+import android.net.Uri
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import android.net.Uri
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
 import com.fooddiary.R
 import com.fooddiary.model.Meal
 import com.fooddiary.model.MealType
+import com.fooddiary.utils.getFormattedDate
 import com.fooddiary.viewmodel.MealViewModel
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.remember
+import androidx.compose.material3.ButtonDefaults.outlinedButtonColors
+import androidx.compose.material3.Divider
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,163 +60,228 @@ fun MealDetailScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Détails du repas") },
+            CenterAlignedTopAppBar(
+                title = {
+                    Text(
+                        "Détails du repas",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, "Retour")
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Retour"
+                        )
                     }
                 },
-                actions = {
-                    if (meal != null) {
-                        IconButton(
-                            onClick = { showDeleteDialog = true }
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_delete),
-                                contentDescription = "Supprimer",
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-                }
+
             )
         },
-        content = { innerPadding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(16.dp)
-                    .verticalScroll(rememberScrollState())
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { navController.navigate("addMeal/$day/$mealIndex") },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
             ) {
-                meal?.let { currentMeal ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "Modifier"
+                )
+            }
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            if (meal == null) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Repas introuvable",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+            } else {
+                // Photo principale
+                meal.photoUri?.takeIf { isUriValid(it) }?.let { uri ->
+                    Image(
+                        painter = rememberAsyncImagePainter(uri),
+                        contentDescription = "Photo du repas",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(300.dp),
+                        contentScale = ContentScale.Crop
+                    )
+                } ?: run {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
+                        Image(
+                            painter = painterResource(id = when (meal.type) {
+                                MealType.BREAKFAST -> R.drawable.croissant
+                                MealType.LUNCH -> R.drawable.dish
+                                MealType.DINNER -> R.drawable.moon
+                                MealType.SNACK -> R.drawable.apple
+                                else -> R.drawable.star
+                            }),
+                            contentDescription = "Type de repas",
+                            modifier = Modifier.size(80.dp),
+                            colorFilter = null // Garde les couleurs originales
+                        )
+                    }
+                }
+
+                // Contenu détaillé
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    // Type de repas avec icône spécifique
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Icône spécifique au type de repas SANS tint
+                            Image(
+                                painter = painterResource(
+                                    when (meal.type) {
+                                        MealType.BREAKFAST -> R.drawable.croissant
+                                        MealType.LUNCH -> R.drawable.dish
+                                        MealType.DINNER -> R.drawable.moon
+                                        MealType.SNACK -> R.drawable.apple
+                                        else -> R.drawable.star
+                                    }
+                                ),
+                                contentDescription = "Type de repas",
+                                modifier = Modifier.size(28.dp)
+
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = when (currentMeal.type) {
+                                text = when (meal.type) {
                                     MealType.BREAKFAST -> "Petit-déjeuner"
                                     MealType.LUNCH -> "Déjeuner"
                                     MealType.DINNER -> "Dîner"
                                     MealType.SNACK -> "Collation"
-                                    MealType.CUSTOM -> "Autre"
+                                    else -> "Autre repas"
                                 },
-                                style = MaterialTheme.typography.titleLarge
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Divider(
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                            thickness = 1.dp,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+
+                    // Description
+                    Column {
+                        Text(
+                            text = "Description",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = meal.description,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Divider(
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                            thickness = 1.dp,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+
+                    // Remarques (si existantes)
+                    meal.notes?.takeIf { it.isNotBlank() }?.let { notes ->
+                        Column {
+                            Text(
+                                text = "Remarques",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = notes,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Divider(
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                                thickness = 1.dp,
+                                modifier = Modifier.padding(vertical = 8.dp)
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    currentMeal.photoUri?.takeIf { isUriValid(it) }?.let { uri ->
-                        Image(
-                            painter = rememberAsyncImagePainter(uri),
-                            contentDescription = "Photo du repas",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(250.dp)
-                                .clip(RoundedCornerShape(12.dp)),
-                            contentScale = ContentScale.Crop
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                text = "Description",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                    // Date
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_calendar),
+                                contentDescription = "Date",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = currentMeal.description,
+                                text = getFormattedDate(day),
                                 style = MaterialTheme.typography.bodyLarge
                             )
                         }
-                    }
-
-                    currentMeal.notes?.takeIf { it.isNotBlank() }?.let { notes ->
                         Spacer(modifier = Modifier.height(16.dp))
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text(
-                                    text = "Remarques",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = notes,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                        }
+                        Divider(
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                            thickness = 1.dp,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
                     }
 
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Button(
-                        onClick = {
-                            navController.navigate("addMeal/$day/$mealIndex")
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("Modifier", style = MaterialTheme.typography.bodyLarge)
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Button(
+                    // Bouton Supprimer
+                    OutlinedButton(
                         onClick = { showDeleteDialog = true },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(50.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            .padding(top = 16.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = MaterialTheme.colorScheme.error
+                        ),
+                        border = BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.error
                         )
                     ) {
-                        Text("Supprimer", style = MaterialTheme.typography.bodyLarge)
+                        Text("Supprimer ce repas")
                     }
-                } ?: run {
-                    Text(
-                        text = "Repas introuvable",
-                        modifier = Modifier.fillMaxWidth(),
-                        style = MaterialTheme.typography.bodyLarge
-                    )
                 }
             }
         }
-    )
+    }
 
-    if (showDeleteDialog && meal != null) {
+    if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Confirmer la suppression") },
-            text = { Text("Voulez-vous vraiment supprimer ce repas ?") },
+            text = { Text("Voulez-vous vraiment supprimer ce repas ? Cette action est irréversible.") },
             confirmButton = {
                 TextButton(
                     onClick = {

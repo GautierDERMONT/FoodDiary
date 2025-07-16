@@ -15,9 +15,9 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -33,7 +33,8 @@ import com.fooddiary.viewmodel.MealViewModel
 fun HomeScreen(
     viewModel: MealViewModel = viewModel(),
     onMealClick: (String, Int) -> Unit = { _, _ -> },
-    onDayClick: (String) -> Unit = { _ -> }
+    onDayClick: (String) -> Unit = { _ -> },
+    onRecapClick: () -> Unit = {}
 ) {
     val currentDay = remember { getCurrentDayShort() }
     val jours = viewModel.weekDays
@@ -95,7 +96,7 @@ fun HomeScreen(
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             shape = CircleShape
                         )
-                        .clickable { }
+                        .clickable { onRecapClick() }
                         .padding(8.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -114,6 +115,33 @@ fun HomeScreen(
                 modifier = Modifier.padding(horizontal = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                var showResetDialog by remember { mutableStateOf(false) }
+
+                if (showResetDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showResetDialog = false },
+                        title = { Text("Confirmation") },
+                        text = { Text("Êtes-vous sûr de vouloir supprimer toutes les données ?") },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    viewModel.clearAllData()
+                                    showResetDialog = false
+                                }
+                            ) {
+                                Text("Confirmer", color = MaterialTheme.colorScheme.error)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = { showResetDialog = false }
+                            ) {
+                                Text("Annuler", color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    )
+                }
+
                 Box(
                     modifier = Modifier
                         .size(48.dp)
@@ -121,7 +149,7 @@ fun HomeScreen(
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             shape = CircleShape
                         )
-                        .clickable { viewModel.clearAllData() }
+                        .clickable { showResetDialog = true }
                         .padding(8.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -181,12 +209,11 @@ fun HomeScreen(
                                 .border(
                                     2.dp,
                                     if (jour == currentDay) MaterialTheme.colorScheme.primary
-                                    else Color.Transparent,
+                                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
                                     RoundedCornerShape(8.dp)
                                 )
                                 .padding(4.dp)
                                 .clickable {
-                                    // Naviguer vers l'écran des repas du jour
                                     onDayClick(jour)
                                 },
                             contentAlignment = Alignment.Center
@@ -276,7 +303,7 @@ fun HomeScreen(
                                         Icons.Default.Remove,
                                         "Supprimer repas vierge",
                                         tint = if (canRemove[jour] == true)
-                                            MaterialTheme.colorScheme.primary
+                                            MaterialTheme.colorScheme.error
                                         else
                                             MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                                     )
