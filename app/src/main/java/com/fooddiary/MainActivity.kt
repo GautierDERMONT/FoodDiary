@@ -53,16 +53,13 @@ fun FoodDiaryApp(viewModel: MealViewModel) {
             HomeScreen(
                 viewModel = viewModel,
                 onMealClick = { day, mealIndex ->
-                    val dayMeals = weekMealsState.value.find { it.day == day }
-                    val meal = dayMeals?.meals?.getOrNull(mealIndex)
-
-                    if (meal != null) {
-                        if (meal.description.isBlank() && meal.photoUri == null) {
-                            navController.navigate("addMeal/$day/$mealIndex")
-                        } else {
-                            navController.navigate("mealDetail/$day/$mealIndex")
-                        }
-                    }
+                    navController.navigate("mealDetail/$day/$mealIndex")
+                },
+                onAddMealClick = { day, mealIndex ->
+                    // Crée d'abord le repas vierge
+                    viewModel.addEmptyMeal(day)
+                    // Puis navigue vers l'écran d'ajout
+                    navController.navigate("addMeal/$day/$mealIndex")
                 },
                 onDayClick = { day ->
                     navController.navigate("dayMeals/$day")

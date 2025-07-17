@@ -133,6 +133,7 @@ class MealViewModel(private val database: AppDatabase) : ViewModel() {
     fun deleteMeal(day: String, mealIndex: Int) {
         viewModelScope.launch {
             mealDao.deleteMealAt(day, mealIndex)
+            weekMeals.value
         }
     }
 

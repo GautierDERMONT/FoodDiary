@@ -11,7 +11,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,25 +32,41 @@ import com.fooddiary.viewmodel.MealViewModel
 fun HomeScreen(
     viewModel: MealViewModel = viewModel(),
     onMealClick: (String, Int) -> Unit = { _, _ -> },
+    onAddMealClick: (String, Int) -> Unit = { _, _ -> },
     onDayClick: (String) -> Unit = { _ -> },
     onRecapClick: () -> Unit = {}
 ) {
     val currentDay = remember { getCurrentDayShort() }
     val jours = viewModel.weekDays
     val weekMeals by viewModel.weekMeals.collectAsState()
-    val canRemove by viewModel.canRemoveVierge.collectAsState()
+
+    val mealsCount by remember(weekMeals) {
+        derivedStateOf {
+
+            weekMeals.associate { dayMeals ->
+                dayMeals.day to dayMeals.meals.count { !it.isVierge() }
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp)
-            .padding(top = 60.dp),
+            .padding(horizontal = 16.dp),
+
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("FoodDiary", style = MaterialTheme.typography.headlineLarge)
-        Spacer(Modifier.height(10.dp))
-        Text("Aperçu hebdomadaire", style = MaterialTheme.typography.titleLarge)
-        Spacer(Modifier.height(24.dp))
+        Image(
+            painter = painterResource(id = R.drawable.ic_logo), // Remplacez par le nom de votre fichier
+            contentDescription = "FoodDiary Logo",
+            modifier = Modifier
+                .width(300.dp) // Ajustez la taille selon vos besoins
+                .height(200.dp)
+                .padding(bottom = 8.dp), // Réduire l'espace en dessous de la rangée
+
+        contentScale = ContentScale.Fit
+        )
+
 
         Row(
             modifier = Modifier
@@ -60,7 +75,6 @@ fun HomeScreen(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Box(
@@ -86,7 +100,6 @@ fun HomeScreen(
             }
 
             Column(
-                modifier = Modifier.padding(horizontal = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Box(
@@ -112,7 +125,6 @@ fun HomeScreen(
             }
 
             Column(
-                modifier = Modifier.padding(horizontal = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 var showResetDialog by remember { mutableStateOf(false) }
@@ -213,9 +225,7 @@ fun HomeScreen(
                                     RoundedCornerShape(8.dp)
                                 )
                                 .padding(4.dp)
-                                .clickable {
-                                    onDayClick(jour)
-                                },
+                                .clickable { onDayClick(jour) },
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -253,59 +263,28 @@ fun HomeScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                dayMeals.meals.forEachIndexed { index, meal ->
-                                    if (index > 0) Spacer(Modifier.height(12.dp))
-                                    ClickableMealBox(
-                                        meal = meal,
-                                        onClick = { onMealClick(dayMeals.day, index) }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                                dayMeals.meals
+                                    .filter { !it.isVierge() }
+                                    .sortedBy { it.mealIndex }
+                                    .forEachIndexed { index, meal ->
+                                        if (index > 0) Spacer(Modifier.height(12.dp))
+                                        ClickableMealBox(
+                                            meal = meal,
+                                            onClick = { onMealClick(dayMeals.day, meal.mealIndex) }
+                                        )
+                                    }
 
-                Spacer(Modifier.height(16.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    jours.forEachIndexed { index, jour ->
-                        Box(
-                            modifier = Modifier.width(48.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                IconButton(
-                                    onClick = { viewModel.addEmptyMeal(jour) },
-                                    modifier = Modifier.size(24.dp),
-                                    enabled = weekMeals[index].meals.size < 8
-                                ) {
-                                    Icon(
-                                        Icons.Default.Add,
-                                        "Ajouter",
-                                        tint = if (weekMeals[index].meals.size < 8)
-                                            MaterialTheme.colorScheme.primary
-                                        else
-                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                    )
-                                }
-
-                                Divider(modifier = Modifier.width(24.dp).height(1.dp))
-
-                                IconButton(
-                                    onClick = { viewModel.removeLastViergeMeal(jour) },
-                                    modifier = Modifier.size(24.dp),
-                                    enabled = canRemove[jour] == true
-                                ) {
-                                    Icon(
-                                        Icons.Default.Remove,
-                                        "Supprimer repas vierge",
-                                        tint = if (canRemove[jour] == true)
-                                            MaterialTheme.colorScheme.error
-                                        else
-                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                if ((mealsCount[dayMeals.day] ?: 0) < 8) {
+                                    if (dayMeals.meals.any { !it.isVierge() }) {
+                                        Spacer(Modifier.height(12.dp))
+                                    }
+                                    AddMealButton(
+                                        onClick = {
+                                            val nextIndex = dayMeals.meals
+                                                .maxOfOrNull { it.mealIndex }
+                                                ?.plus(1) ?: 0
+                                            onAddMealClick(dayMeals.day, nextIndex)
+                                        }
                                     )
                                 }
                             }
@@ -343,19 +322,31 @@ fun ClickableMealBox(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        if (meal.isVierge()) {
-            Box(
-                modifier = Modifier
-                    .size(12.dp)
-                    .clip(CircleShape)
-                    .border(2.dp, Color.LightGray, CircleShape)
-                    .background(Color.White)
-            )
-        } else {
-            Image(
-                painter = painterResource(id = iconRes),
-                contentDescription = meal.type.name,
-                modifier = Modifier.size(24.dp))
-        }
+        Image(
+            painter = painterResource(id = iconRes),
+            contentDescription = meal.type.name,
+            modifier = Modifier.size(24.dp)
+        )
+    }
+}
+
+@Composable
+fun AddMealButton(
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
+            .background(Color.White)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Add,
+            contentDescription = "Ajouter un repas",
+            tint = Color.LightGray
+        )
     }
 }
