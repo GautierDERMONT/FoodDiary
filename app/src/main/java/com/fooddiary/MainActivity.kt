@@ -64,12 +64,12 @@ fun FoodDiaryApp(viewModel: MealViewModel) {
                         }
                     }
                 },
-                        onDayClick = { day ->
+                onDayClick = { day ->
                     navController.navigate("dayMeals/$day")
                 },
-                        onRecapClick = {
-                            navController.navigate("recap")
-                        }
+                onRecapClick = {
+                    navController.navigate("recap")
+                }
             )
         }
 

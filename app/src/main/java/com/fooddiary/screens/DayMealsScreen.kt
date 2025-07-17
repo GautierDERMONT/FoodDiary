@@ -90,38 +90,27 @@ fun DayMealsScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    if (filteredMeals.size < 8) {
+            if (filteredMeals.size < 8) { // Afficher seulement si moins de 8 repas
+                FloatingActionButton(
+                    onClick = {
                         viewModel.addEmptyMeal(day)
                         val newIndex = (filteredMeals.maxByOrNull { it.mealIndex }?.mealIndex ?: 0) + 1
                         navController.navigate("addMeal/$day/$newIndex")
-                    } else {
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar(
-                                "Maximum de 8 repas atteint pour ce jour"
-                            )
-                        }
+                    },
+                    modifier = Modifier.size(64.dp),
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    content = {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = "Ajouter un repas",
+                            modifier = Modifier.size(32.dp),
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
                     }
-                },
-                modifier = Modifier.size(64.dp),
-                containerColor = if (filteredMeals.size < 8)
-                    MaterialTheme.colorScheme.primary
-                else
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                content = {
-                    Icon(
-                        Icons.Default.Add,
-                        contentDescription = "Ajouter un repas",
-                        modifier = Modifier.size(32.dp),
-                        tint = if (filteredMeals.size < 8)
-                            MaterialTheme.colorScheme.onPrimary
-                        else
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                    )
-                }
-            )
+                )
+            }
         },
+
         content = { innerPadding ->
             if (filteredMeals.isEmpty()) {
                 Box(
@@ -143,16 +132,14 @@ fun DayMealsScreen(
                     items(filteredMeals) { meal ->
                         MealCard(
                             meal = meal,
-                            onClick = {
-                                navController.navigate("mealDetail/$day/${meal.mealIndex}")
-                            },
-                            onEdit = {
-                                navController.navigate("addMeal/$day/${meal.mealIndex}")
-                            },
-                            onDelete = {
-                                viewModel.deleteMeal(day, meal.mealIndex)
-                            }
+                            onClick = { navController.navigate("mealDetail/$day/${meal.mealIndex}") },
+                            onEdit = { navController.navigate("addMeal/$day/${meal.mealIndex}") },
+                            onDelete = { viewModel.deleteMeal(day, meal.mealIndex) }
                         )
+                        // Ajouter un espace après chaque carte sauf la dernière
+                        if (meal != filteredMeals.last()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
                     }
                 }
             }

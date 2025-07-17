@@ -81,15 +81,17 @@ class MealViewModel(private val database: AppDatabase) : ViewModel() {
     }
 
 
+    // Dans MealViewModel.kt
     fun addEmptyMeal(day: String) {
         viewModelScope.launch {
             val existingMeals = mealDao.getMealsByDay(day).first()
 
-            // On détermine le prochain index disponible (minimum 3)
-            val nextIndex = maxOf(
-                existingMeals.maxOfOrNull { it.mealIndex }?.plus(1) ?: 3, // Commence à 3 si liste vide
-                3 // Garantit qu'on ne descend pas en dessous de 3
-            )
+            // Trouver le premier index disponible à partir de 3
+            val usedIndices = existingMeals.map { it.mealIndex }.toSet()
+            var nextIndex = 3
+            while (nextIndex in usedIndices && nextIndex < 8) {
+                nextIndex++
+            }
 
             if (nextIndex >= 8) return@launch // Limite à 8 repas max
 
@@ -105,6 +107,7 @@ class MealViewModel(private val database: AppDatabase) : ViewModel() {
             )
         }
     }
+
     fun removeLastViergeMeal(day: String) {
         viewModelScope.launch {
             val existingMeals = mealDao.getMealsByDay(day).first()
@@ -115,6 +118,10 @@ class MealViewModel(private val database: AppDatabase) : ViewModel() {
             lastVierge?.let { mealDao.delete(it) }
         }
     }
+
+    fun canAddMoreMeals(day: String): Flow<Boolean> = mealDao.getMealsByDay(day)
+        .map { it.size < 8 }
+        .flowOn(Dispatchers.Default)
 
 
     fun getMeal(day: String, mealIndex: Int): Meal? {
