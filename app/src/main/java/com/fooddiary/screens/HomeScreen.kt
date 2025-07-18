@@ -27,9 +27,14 @@ import com.fooddiary.model.Meal
 import com.fooddiary.model.MealType
 import com.fooddiary.utils.getCurrentDayShort
 import com.fooddiary.viewmodel.MealViewModel
+import androidx.navigation.NavController
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 
 @Composable
 fun HomeScreen(
+    navController: NavController,
     viewModel: MealViewModel = viewModel(),
     onMealClick: (String, Int) -> Unit = { _, _ -> },
     onAddMealClick: (String, Int) -> Unit = { _, _ -> },
@@ -57,12 +62,13 @@ fun HomeScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Image(
-            painter = painterResource(id = R.drawable.ic_logo), // Remplacez par le nom de votre fichier
+            painter = painterResource(id = R.drawable.ic_logo),
             contentDescription = "FoodDiary Logo",
             modifier = Modifier
-                .width(300.dp) // Ajustez la taille selon vos besoins
+                .padding(top = 28.dp)
+                .width(300.dp)
                 .height(200.dp)
-                .padding(bottom = 8.dp), // Réduire l'espace en dessous de la rangée
+                .padding(bottom = 8.dp),
 
         contentScale = ContentScale.Fit
         )
@@ -84,7 +90,7 @@ fun HomeScreen(
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             shape = CircleShape
                         )
-                        .clickable { }
+                        .clickable { navController.navigate("export") }
                         .padding(8.dp),
                     contentAlignment = Alignment.Center
                 ) {

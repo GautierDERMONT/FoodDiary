@@ -81,30 +81,29 @@ class MealViewModel(private val database: AppDatabase) : ViewModel() {
     }
 
 
-    // Dans MealViewModel.kt
     fun addEmptyMeal(day: String) {
         viewModelScope.launch {
             val existingMeals = mealDao.getMealsByDay(day).first()
+            if (existingMeals.none { it.description.isEmpty() && it.photoUri == null }) {
+                val usedIndices = existingMeals.map { it.mealIndex }.toSet()
+                var nextIndex = 3
+                while (nextIndex in usedIndices && nextIndex < 8) {
+                    nextIndex++
+                }
 
-            // Trouver le premier index disponible à partir de 3
-            val usedIndices = existingMeals.map { it.mealIndex }.toSet()
-            var nextIndex = 3
-            while (nextIndex in usedIndices && nextIndex < 8) {
-                nextIndex++
+                if (nextIndex < 8) {
+                    mealDao.insert(
+                        MealEntity(
+                            day = day,
+                            mealIndex = nextIndex,
+                            type = MealType.CUSTOM,
+                            description = "",
+                            photoUri = null,
+                            notes = null
+                        )
+                    )
+                }
             }
-
-            if (nextIndex >= 8) return@launch // Limite à 8 repas max
-
-            mealDao.insert(
-                MealEntity(
-                    day = day,
-                    mealIndex = nextIndex,
-                    type = MealType.CUSTOM,
-                    description = "",
-                    photoUri = null,
-                    notes = null
-                )
-            )
         }
     }
 
@@ -152,6 +151,7 @@ class MealViewModel(private val database: AppDatabase) : ViewModel() {
 
     fun updateMeal(day: String, mealIndex: Int, meal: Meal) {
         viewModelScope.launch {
+
             val existingMeal = mealDao.getMealsByDay(day).first().find { it.mealIndex == mealIndex }
 
             if (existingMeal != null) {

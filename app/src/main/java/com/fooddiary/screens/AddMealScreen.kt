@@ -1,7 +1,11 @@
 package com.fooddiary.screens
 
+import android.Manifest
+import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -26,6 +30,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
@@ -36,6 +41,15 @@ import com.fooddiary.viewmodel.MealViewModel
 import java.io.File
 import java.io.FileOutputStream
 
+private fun Context.createImageUri(): Uri {
+    val imagesDir = File(filesDir, "images").apply { mkdirs() }
+    val imageFile = File(imagesDir, "meal_${System.currentTimeMillis()}.jpg")
+    return FileProvider.getUriForFile(
+        this,
+        "${packageName}.fileprovider",
+        imageFile
+    )
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,6 +59,7 @@ fun AddMealScreen(
     mealIndex: Int,
     viewModel: MealViewModel
 ) {
+    val context = LocalContext.current
     val existingMeal by remember(day, mealIndex) {
         derivedStateOf {
             viewModel.weekMeals.value
@@ -55,10 +70,7 @@ fun AddMealScreen(
 
     val isEditMode = existingMeal != null
     var selectedMealType by remember {
-        mutableStateOf(
-            if (isEditMode) existingMeal?.type
-            else null
-        )
+        mutableStateOf(existingMeal?.type ?: MealType.CUSTOM)
     }
     var description by remember { mutableStateOf(existingMeal?.description ?: "") }
     var notes by remember { mutableStateOf(existingMeal?.notes ?: "") }
@@ -66,86 +78,84 @@ fun AddMealScreen(
     var showPhotoPicker by remember { mutableStateOf(false) }
     var showErrorDialog by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
-    val context = LocalContext.current
 
-    val title = if (isEditMode) "Modifier le repas" else "Ajouter un repas"
-    val buttonText = if (isEditMode) "Mettre à jour" else "Enregistrer"
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (!success) photoUri = null
+    }
 
-    fun isUriValid(context: Context, uriString: String?): Boolean {
-        if (uriString == null) return false
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            val uri = context.createImageUri()
+            photoUri = uri
+            cameraLauncher.launch(uri)
+        } else {
+            Toast.makeText(context, "Permission nécessaire pour utiliser la caméra", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun takePhoto() {
+        when {
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                val uri = context.createImageUri()
+                photoUri = uri
+                cameraLauncher.launch(uri)
+            }
+            (context as Activity).shouldShowRequestPermissionRationale(Manifest.permission.CAMERA) -> {
+                showErrorDialog = true
+                errorMessage = "L'application a besoin d'accéder à votre caméra"
+                permissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+            else -> permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    fun isUriValid(uri: Uri?): Boolean {
         return try {
-            val uri = Uri.parse(uriString)
-            context.contentResolver.openInputStream(uri) != null
+            uri?.let { context.contentResolver.openInputStream(it)?.close() }
+            uri != null
         } catch (e: Exception) {
             false
         }
     }
 
-    fun copyImageToAppStorage(context: Context, uri: Uri): Uri {
+    fun copyImageToAppStorage(uri: Uri): Uri? {
         return try {
-            val inputStream = context.contentResolver.openInputStream(uri) ?: return uri
+            val inputStream = context.contentResolver.openInputStream(uri) ?: return null
             val imagesDir = File(context.filesDir, "images").apply { mkdirs() }
             val outputFile = File(imagesDir, "img_${System.currentTimeMillis()}.jpg")
-
-            inputStream.use { input ->
-                FileOutputStream(outputFile).use { output ->
-                    input.copyTo(output)
-                }
-            }
-
-            FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                outputFile
-            )
+            inputStream.use { input -> FileOutputStream(outputFile).use { output -> input.copyTo(output) } }
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", outputFile)
         } catch (e: Exception) {
-            e.printStackTrace()
-            uri // Retourne l'URI original en cas d'erreur
+            null
         }
     }
-
-
 
     val galleryLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent(),
-        onResult = { uri: Uri? ->
-            uri?.let {
-                try {
-                    val copiedUri = copyImageToAppStorage(context, it)
-                    photoUri = copiedUri
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    photoUri = uri // Utilise l'URI original si la copie échoue
-                }
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            try {
+                photoUri = copyImageToAppStorage(it) ?: it
+            } catch (e: Exception) {
+                photoUri = it
             }
         }
-    )
-
-    val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success) photoUri?.let { }
-    }
-
-
-
-    fun takePhoto() {
-        val uri = createImageUri(context)
-        photoUri = uri
-        cameraLauncher.launch(uri)
     }
 
     fun validateFields(): Boolean {
         return when {
-            selectedMealType == null -> {
-                errorMessage = "Veuillez sélectionner un type de repas"
-                false
-            }
             description.isBlank() -> {
                 errorMessage = "Veuillez saisir une description"
                 false
             }
-            photoUri == null || !isUriValid(context, photoUri.toString()) -> {
+            photoUri == null || !isUriValid(photoUri) -> {
                 errorMessage = "Veuillez ajouter une photo valide"
                 false
             }
@@ -188,7 +198,7 @@ fun AddMealScreen(
     if (showErrorDialog) {
         AlertDialog(
             onDismissRequest = { showErrorDialog = false },
-            title = { Text("Champs obligatoires") },
+            title = { Text("Erreur") },
             text = { Text(errorMessage) },
             confirmButton = {
                 TextButton(onClick = { showErrorDialog = false }) {
@@ -201,7 +211,7 @@ fun AddMealScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(title, style = MaterialTheme.typography.titleLarge) },
+                title = { Text(if (isEditMode) "Modifier le repas" else "Ajouter un repas") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, "Retour")
@@ -267,7 +277,7 @@ fun AddMealScreen(
                         .clickable { showPhotoPicker = true },
                     contentAlignment = Alignment.Center
                 ) {
-                    if (photoUri != null && isUriValid(context, photoUri.toString())) {
+                    if (photoUri != null && isUriValid(photoUri)) {
                         Image(
                             painter = rememberAsyncImagePainter(photoUri),
                             contentDescription = "Photo du repas",
@@ -317,13 +327,18 @@ fun AddMealScreen(
                 Button(
                     onClick = {
                         if (validateFields()) {
-                            val meal = Meal(
-                                type = selectedMealType!!,
-                                description = description,
-                                photoUri = photoUri?.toString(),
-                                notes = notes.takeIf { it.isNotBlank() }
+                            viewModel.updateMeal(
+                                day = day,
+                                mealIndex = mealIndex,
+                                meal = Meal(
+                                    type = selectedMealType,
+                                    description = description,
+                                    photoUri = photoUri?.toString(),
+                                    notes = notes.takeIf { it.isNotBlank() },
+                                    mealIndex = mealIndex,
+                                    day = day
+                                )
                             )
-                            viewModel.updateMeal(day, mealIndex, meal)
                             navController.popBackStack()
                         } else {
                             showErrorDialog = true
@@ -334,7 +349,10 @@ fun AddMealScreen(
                         .height(50.dp),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text(buttonText, style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        if (isEditMode) "Mettre à jour" else "Enregistrer",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
                 }
             }
         }
@@ -365,22 +383,17 @@ fun MealTypeOption(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .size(64.dp)
-                .background(
-                    color = Color.Transparent,
-                    shape = CircleShape
-                )
+                .background(Color.Transparent, CircleShape)
                 .border(
-                    width = 2.dp,
-                    color = if (isSelected) MaterialTheme.colorScheme.primary
-                    else Color.LightGray,
-                    shape = CircleShape
+                    2.dp,
+                    if (isSelected) MaterialTheme.colorScheme.primary else Color.LightGray,
+                    CircleShape
                 )
         ) {
             Image(
                 painter = painterResource(id = iconRes),
                 contentDescription = label,
-                modifier = Modifier.size(32.dp)
-            )
+                modifier = Modifier.size(32.dp))
         }
         Spacer(Modifier.height(4.dp))
         Text(
@@ -390,14 +403,4 @@ fun MealTypeOption(
             else MaterialTheme.colorScheme.onSurface
         )
     }
-}
-
-private fun createImageUri(context: Context): Uri {
-    val imagesDir = File(context.filesDir, "images").apply { mkdirs() }
-    val imageFile = File(imagesDir, "meal_${System.currentTimeMillis()}.jpg")
-    return FileProvider.getUriForFile(
-        context,
-        "${context.packageName}.fileprovider",
-        imageFile
-    )
 }

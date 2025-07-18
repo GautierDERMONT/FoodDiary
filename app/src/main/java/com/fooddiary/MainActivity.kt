@@ -19,6 +19,7 @@ import com.fooddiary.ui.theme.FoodDiaryTheme
 import com.fooddiary.screens.RecapScreen
 import com.fooddiary.viewmodel.MealViewModel
 
+
 class MainActivity : ComponentActivity() {
     private val viewModel: MealViewModel by viewModels {
         object : ViewModelProvider.Factory {
@@ -51,14 +52,12 @@ fun FoodDiaryApp(viewModel: MealViewModel) {
     ) {
         composable("home") {
             HomeScreen(
+                navController = navController,
                 viewModel = viewModel,
                 onMealClick = { day, mealIndex ->
                     navController.navigate("mealDetail/$day/$mealIndex")
                 },
                 onAddMealClick = { day, mealIndex ->
-                    // Crée d'abord le repas vierge
-                    viewModel.addEmptyMeal(day)
-                    // Puis navigue vers l'écran d'ajout
                     navController.navigate("addMeal/$day/$mealIndex")
                 },
                 onDayClick = { day ->
@@ -111,7 +110,6 @@ fun FoodDiaryApp(viewModel: MealViewModel) {
                 viewModel = viewModel
             )
         }
-
 
     }
 }
