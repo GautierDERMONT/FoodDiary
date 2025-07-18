@@ -1,23 +1,34 @@
 package com.fooddiary.viewmodel
 
 import android.app.Application
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.preference.PreferenceManager
 import com.fooddiary.data.AppDatabase
 import com.fooddiary.data.MealEntity
 import com.fooddiary.model.DayMeals
 import com.fooddiary.model.Meal
 import com.fooddiary.model.MealType
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
-class MealViewModel(private val database: AppDatabase) : ViewModel() {
+class MealViewModel(
+    private val database: AppDatabase,
+    private val application: Application
+) : ViewModel() {
     private val mealDao = database.mealDao()
+    private val prefs: SharedPreferences = PreferenceManager.getDefaultSharedPreferences(application)
+    private val _dieticianEmail = MutableStateFlow(prefs.getString("dietician_email", "") ?: "")
+    val dieticianEmail: StateFlow<String> = _dieticianEmail.asStateFlow()
 
     val weekDays = listOf("Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim")
 
@@ -30,7 +41,6 @@ class MealViewModel(private val database: AppDatabase) : ViewModel() {
                     .map { it.toMeal() }
                     .toMutableList()
 
-                // Ensure base meals exist
                 (0..2).forEach { index ->
                     if (dbMeals.none { it.mealIndex == index }) {
                         val type = when(index) {
@@ -49,6 +59,13 @@ class MealViewModel(private val database: AppDatabase) : ViewModel() {
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Lazily, initialWeekMeals())
 
+    fun updateDieticianEmail(email: String) {
+        viewModelScope.launch {
+            _dieticianEmail.value = email
+            prefs.edit().putString("dietician_email", email).apply()
+        }
+    }
+
     private fun initialWeekMeals(): List<DayMeals> {
         return weekDays.map { day ->
             DayMeals(day = day, meals = mutableListOf())
@@ -58,13 +75,11 @@ class MealViewModel(private val database: AppDatabase) : ViewModel() {
     fun removeViergeMeal(day: String, mealIndex: Int) {
         viewModelScope.launch {
             val meals = mealDao.getMealsByDay(day).first()
-            if (meals.size <= 3) return@launch // Ne pas supprimer les 3 repas de base
+            if (meals.size <= 3) return@launch
 
-            // Supprime seulement le repas vierge à l'index spécifié
             meals.firstOrNull { it.mealIndex == mealIndex && it.description.isEmpty() && it.photoUri == null }
                 ?.let { mealDao.delete(it) }
 
-            // Réindexation
             val remainingMeals = mealDao.getMealsByDay(day).first()
             remainingMeals.forEachIndexed { newIndex, meal ->
                 if (meal.mealIndex != newIndex) {
@@ -79,7 +94,6 @@ class MealViewModel(private val database: AppDatabase) : ViewModel() {
             mealDao.deleteAllMeals()
         }
     }
-
 
     fun addEmptyMeal(day: String) {
         viewModelScope.launch {
@@ -122,7 +136,6 @@ class MealViewModel(private val database: AppDatabase) : ViewModel() {
         .map { it.size < 8 }
         .flowOn(Dispatchers.Default)
 
-
     fun getMeal(day: String, mealIndex: Int): Meal? {
         return weekMeals.value
             .find { it.day == day }
@@ -151,7 +164,6 @@ class MealViewModel(private val database: AppDatabase) : ViewModel() {
 
     fun updateMeal(day: String, mealIndex: Int, meal: Meal) {
         viewModelScope.launch {
-
             val existingMeal = mealDao.getMealsByDay(day).first().find { it.mealIndex == mealIndex }
 
             if (existingMeal != null) {
@@ -175,8 +187,6 @@ class MealViewModel(private val database: AppDatabase) : ViewModel() {
                     )
                 )
             }
-
-            // Force un refresh du Flow
             mealDao.getMealsByDay(day).first()
         }
     }
@@ -187,17 +197,20 @@ class MealViewModel(private val database: AppDatabase) : ViewModel() {
             description = description,
             photoUri = photoUri,
             notes = notes,
-            mealIndex = mealIndex, // Ajoutez cette ligne
-            day = day // Ajoutez cette ligne
+            mealIndex = mealIndex,
+            day = day
         )
     }
 
     companion object {
-        class Factory(private val database: AppDatabase) : ViewModelProvider.Factory {
+        class Factory(
+            private val database: AppDatabase,
+            private val application: Application
+        ) : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 if (modelClass.isAssignableFrom(MealViewModel::class.java)) {
-                    return MealViewModel(database) as T
+                    return MealViewModel(database, application) as T
                 }
                 throw IllegalArgumentException("Unknown ViewModel class")
             }

@@ -24,6 +24,8 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 import android.widget.Toast
+import androidx.compose.ui.text.font.FontWeight
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,10 +35,15 @@ fun ExportScreen(
 ) {
     var exportFormat by remember { mutableStateOf("PDF") }
     val formats = listOf("PDF", "Image")
-    var sendToDietician by remember { mutableStateOf(true) }
+    var dieticianEmail by remember { mutableStateOf(viewModel.dieticianEmail.value) }
+    var sendToDietician by remember { mutableStateOf(false) }
     val context = LocalContext.current
     var showSaveSuccess by remember { mutableStateOf(false) }
     var saveSuccessMessage by remember { mutableStateOf("") }
+
+    LaunchedEffect(dieticianEmail) {
+        viewModel.updateDieticianEmail(dieticianEmail)
+    }
 
     if (showSaveSuccess) {
         LaunchedEffect(Unit) {
@@ -48,8 +55,14 @@ fun ExportScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Exporter", style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = {
+                title = {
+                    Text(
+                        "Exporter",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                },                navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Retour")
                     }
@@ -114,16 +127,29 @@ fun ExportScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(
-                    checked = sendToDietician,
-                    onCheckedChange = { sendToDietician = it },
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-                Text("Envoyer à ma diététicienne", style = MaterialTheme.typography.bodyLarge)
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = sendToDietician,
+                        onCheckedChange = { sendToDietician = it },
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Text("Envoyer à ma diététicienne", style = MaterialTheme.typography.bodyLarge)
+                }
+
+                if (sendToDietician) {
+                    OutlinedTextField(
+                        value = dieticianEmail,
+                        onValueChange = { dieticianEmail = it },
+                        label = { Text("Email de la diététicienne") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -139,7 +165,7 @@ fun ExportScreen(
                         file?.let {
                             shareFile(context, it, exportFormat)
                             if (sendToDietician) {
-                                sendToDietician(context, it, exportFormat)
+                                sendToDietician(context, it, exportFormat, dieticianEmail)
                             }
                         }
                     },
@@ -207,7 +233,6 @@ private fun createExportFile(context: Context, viewModel: MealViewModel, format:
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         val fileName = "FoodDiary_$timeStamp.${format.lowercase()}"
 
-        // Utilisez le répertoire cache de l'application
         val storageDir = File(context.cacheDir, "exports")
         if (!storageDir.exists()) {
             storageDir.mkdirs()
@@ -228,8 +253,7 @@ private fun createExportFile(context: Context, viewModel: MealViewModel, format:
 
 private fun createPdf(file: File, viewModel: MealViewModel): Boolean {
     return try {
-        // Implémentation PDF simplifiée
-        file.writeText("PDF Content") // Remplacer par la vraie implémentation
+        file.writeText("PDF Content")
         true
     } catch (e: Exception) {
         e.printStackTrace()
@@ -239,8 +263,7 @@ private fun createPdf(file: File, viewModel: MealViewModel): Boolean {
 
 private fun createImage(file: File, viewModel: MealViewModel, context: Context): Boolean {
     return try {
-        // Implémentation Image simplifiée
-        file.writeText("Image Content") // Remplacer par la vraie implémentation
+        file.writeText("Image Content")
         true
     } catch (e: Exception) {
         e.printStackTrace()
@@ -252,7 +275,7 @@ private fun shareFile(context: Context, file: File, format: String) {
     try {
         val uri = FileProvider.getUriForFile(
             context,
-            "${context.packageName}.provider",  // Doit correspondre au manifest
+            "${context.packageName}.fileprovider",
             file
         )
 
@@ -268,21 +291,25 @@ private fun shareFile(context: Context, file: File, format: String) {
 
         context.startActivity(Intent.createChooser(shareIntent, "Partager via"))
     } catch (e: Exception) {
-        e.printStackTrace()
-        // Gérer l'erreur (par exemple, afficher un Toast)
+        Toast.makeText(context, "Erreur lors du partage: ${e.message}", Toast.LENGTH_LONG).show()
     }
 }
 
-private fun sendToDietician(context: Context, file: File, format: String) {
+private fun sendToDietician(context: Context, file: File, format: String, email: String) {
+    if (email.isBlank()) {
+        Toast.makeText(context, "Veuillez entrer un email valide", Toast.LENGTH_SHORT).show()
+        return
+    }
+
     val uri = FileProvider.getUriForFile(
         context,
-        "${context.packageName}.provider",
+        "${context.packageName}.fileprovider",
         file
     )
 
     val emailIntent = Intent(Intent.ACTION_SEND).apply {
         type = "message/rfc822"
-        putExtra(Intent.EXTRA_EMAIL, arrayOf("dietician@example.com"))
+        putExtra(Intent.EXTRA_EMAIL, arrayOf(email))
         putExtra(Intent.EXTRA_SUBJECT, "Mon carnet alimentaire")
         putExtra(Intent.EXTRA_TEXT, "Voici mon carnet alimentaire comme convenu.")
         putExtra(Intent.EXTRA_STREAM, uri)
@@ -296,7 +323,7 @@ private fun sendToDietician(context: Context, file: File, format: String) {
     try {
         context.startActivity(Intent.createChooser(emailIntent, "Envoyer à la diététicienne"))
     } catch (e: Exception) {
-        e.printStackTrace()
+        Toast.makeText(context, "Aucune application email trouvée", Toast.LENGTH_SHORT).show()
     }
 }
 

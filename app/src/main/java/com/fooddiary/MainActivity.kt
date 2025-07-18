@@ -17,8 +17,8 @@ import com.fooddiary.screens.MealDetailScreen
 import com.fooddiary.screens.DayMealsScreen
 import com.fooddiary.ui.theme.FoodDiaryTheme
 import com.fooddiary.screens.RecapScreen
+import com.fooddiary.screens.ExportScreen
 import com.fooddiary.viewmodel.MealViewModel
-
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MealViewModel by viewModels {
@@ -26,7 +26,7 @@ class MainActivity : ComponentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val application = requireNotNull(this@MainActivity.application) as FoodDiaryApplication
-                return MealViewModel(application.database) as T
+                return MealViewModel(application.database, application) as T
             }
         }
     }
@@ -87,7 +87,6 @@ fun FoodDiaryApp(viewModel: MealViewModel) {
             )
         }
 
-
         composable("dayMeals/{day}") { backStackEntry ->
             val day = backStackEntry.arguments?.getString("day") ?: ""
             DayMealsScreen(
@@ -111,5 +110,11 @@ fun FoodDiaryApp(viewModel: MealViewModel) {
             )
         }
 
+        composable("export") {
+            ExportScreen(
+                navController = navController,
+                viewModel = viewModel
+            )
+        }
     }
 }

@@ -1,4 +1,3 @@
-// FoodDiaryApplication.kt
 package com.fooddiary
 
 import android.app.Application
@@ -16,7 +15,7 @@ class FoodDiaryApplication : Application() {
             .diskCache {
                 DiskCache.Builder()
                     .directory(cacheDir.resolve("image_cache"))
-                    .maxSizeBytes(50L * 1024 * 1024) // 50MB
+                    .maxSizeBytes(50L * 1024 * 1024)
                     .build()
             }
             .build()
