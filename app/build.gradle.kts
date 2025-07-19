@@ -68,7 +68,10 @@ dependencies {
     // Coil
     implementation("io.coil-kt:coil-compose:2.4.0")
 
-    // Autres dépendances
+
+    implementation("com.itextpdf:itext7-core:7.2.5")
+    implementation("androidx.compose.ui:ui-tooling:1.5.4")
+    implementation("androidx.compose.foundation:foundation:1.5.4")
     implementation("androidx.compose.foundation:foundation:1.5.4")
     implementation ("androidx.preference:preference-ktx:1.2.1")
     implementation ("androidx.datastore:datastore-preferences:1.0.0")

@@ -2,7 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Permissions pour la caméra -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <!-- Permissions pour le stockage -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <!-- Pour Android 10 et inférieur -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -11,6 +15,10 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <!-- Pour Android 14+ -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Nouvelles permissions pour l'export amélioré -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
 
     <application
         android:name=".FoodDiaryApplication"
