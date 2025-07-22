@@ -57,6 +57,7 @@ fun HomeScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 16.dp),
 
         horizontalAlignment = Alignment.CenterHorizontally
@@ -102,7 +103,11 @@ fun HomeScreen(
                     )
                 }
                 Spacer(Modifier.height(4.dp))
-                Text("Export", style = MaterialTheme.typography.labelSmall)
+                Text(
+                    "Export",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface // ou onBackground selon votre préférence
+                )
             }
 
             Column(
@@ -127,7 +132,11 @@ fun HomeScreen(
                     )
                 }
                 Spacer(Modifier.height(4.dp))
-                Text("Recap", style = MaterialTheme.typography.labelSmall)
+                Text(
+                    "Recap",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface // ou onBackground selon votre préférence
+                )
             }
 
             Column(
@@ -179,7 +188,11 @@ fun HomeScreen(
                     )
                 }
                 Spacer(Modifier.height(4.dp))
-                Text("Reset", style = MaterialTheme.typography.labelSmall)
+                Text(
+                    "Reset",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface // ou onBackground selon votre préférence
+                )
             }
         }
 
@@ -323,15 +336,21 @@ fun ClickableMealBox(
         modifier = Modifier
             .size(40.dp)
             .clip(RoundedCornerShape(8.dp))
-            .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
-            .background(Color.White)
+            .border(
+                1.dp,
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                RoundedCornerShape(8.dp)
+            )
+            .background(MaterialTheme.colorScheme.surface)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Image(
             painter = painterResource(id = iconRes),
             contentDescription = meal.type.name,
-            modifier = Modifier.size(24.dp)
+            modifier = Modifier.size(24.dp),
+            colorFilter = null
+
         )
     }
 }
@@ -344,15 +363,20 @@ fun AddMealButton(
         modifier = Modifier
             .size(40.dp)
             .clip(RoundedCornerShape(8.dp))
-            .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
-            .background(Color.White)
+            .border(
+                1.dp,
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                RoundedCornerShape(8.dp)
+            )
+            .background(MaterialTheme.colorScheme.surface)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = Icons.Default.Add,
             contentDescription = "Ajouter un repas",
-            tint = Color.LightGray
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+
         )
     }
 }

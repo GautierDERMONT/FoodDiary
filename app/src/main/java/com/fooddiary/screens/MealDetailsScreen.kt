@@ -128,6 +128,7 @@ fun MealDetailScreen(
                                 MealType.DINNER -> R.drawable.moon
                                 MealType.SNACK -> R.drawable.apple
                                 else -> R.drawable.star
+
                             }),
                             contentDescription = "Type de repas",
                             modifier = Modifier.size(80.dp)

@@ -286,7 +286,7 @@ private fun generatePreviewBitmap(
             strokeWidth = 2f * density
             isAntiAlias = true
         }
-        val cornerRadius = 10f * density
+        val cornerRadius = 0f * density
         val halfStroke = borderPaint.strokeWidth / 2
         val borderRect = RectF(
             halfStroke,
