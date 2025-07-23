@@ -93,8 +93,7 @@ fun DayMealsScreen(
             if (filteredMeals.size < 8) { // Afficher seulement si moins de 8 repas
                 FloatingActionButton(
                     onClick = {
-                        viewModel.addEmptyMeal(day)
-                        val newIndex = (filteredMeals.maxByOrNull { it.mealIndex }?.mealIndex ?: 0) + 1
+                        val newIndex = (filteredMeals.maxByOrNull { it.mealIndex }?.mealIndex ?: -1) + 1
                         navController.navigate("addMeal/$day/$newIndex")
                     },
                     modifier = Modifier.size(64.dp),

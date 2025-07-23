@@ -45,6 +45,8 @@ import com.fooddiary.viewmodel.MealViewModel
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.ui.platform.LocalFocusManager
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,11 +57,14 @@ fun AddMealScreen(
     viewModel: MealViewModel
 ) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+
     val existingMeal by remember(day, mealIndex) {
         derivedStateOf {
             viewModel.weekMeals.value
                 .find { it.day == day }
                 ?.meals?.getOrNull(mealIndex)
+                ?.takeIf { it.description.isNotBlank() || it.photoUri != null }
         }
     }
 
@@ -221,6 +226,8 @@ fun AddMealScreen(
                     .padding(innerPadding)
                     .padding(16.dp)
                     .verticalScroll(rememberScrollState())
+                    .clickable { focusManager.clearFocus() }
+
             ) {
                 Text(
                     text = "Type de repas",

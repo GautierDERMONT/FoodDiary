@@ -166,13 +166,13 @@ fun RecapScreen(
 private fun StableDayRecap(
     meals: List<Meal>,
     day: String,
-    onMealClick: (Meal) -> Unit // Passer l'objet Meal directement
+    onMealClick: (Meal) -> Unit
 ) {
     val context = LocalContext.current
     val validMeals = remember(meals) {
         meals.filter { !it.isVierge() && it.photoUri != null }
     }
-    val rowHeight = 96.dp
+    val rowHeight = 84.dp
     val imageSpacing = 8.dp
     val rows = remember(validMeals.size) { (validMeals.size + 3) / 4 }
 
@@ -194,16 +194,21 @@ private fun StableDayRecap(
                 horizontalArrangement = Arrangement.spacedBy(imageSpacing)
             ) {
                 for (meal in rowItems) {
-                    Image(
-                        painter = rememberAsyncImagePainter(meal.photoUri),
-                        contentDescription = "Photo du repas",
+                    Box(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxSize()
                             .clip(RoundedCornerShape(8.dp))
-                            .clickable { onMealClick(meal) }, // Passer l'objet Meal
-                        contentScale = ContentScale.Crop
-                    )
+                    ) {
+                        Image(
+                            painter = rememberAsyncImagePainter(meal.photoUri),
+                            contentDescription = "Photo du repas",
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable { onMealClick(meal) },
+                            contentScale = ContentScale.Crop // Assure que l'image remplit complètement l'espace disponible
+                        )
+                    }
                 }
                 repeat(4 - rowItems.size) {
                     Spacer(modifier = Modifier.weight(1f).fillMaxSize())
