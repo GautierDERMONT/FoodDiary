@@ -15,7 +15,7 @@ class FoodDiaryApplication : Application() {
             .diskCache {
                 DiskCache.Builder()
                     .directory(cacheDir.resolve("image_cache"))
-                    .maxSizeBytes(50L * 1024 * 1024)
+                    .maxSizeBytes(100L * 1024 * 1024)
                     .build()
             }
             .build()

@@ -3,23 +3,25 @@ package com.fooddiary.screens
 import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.background
 import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,27 +36,15 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
+import com.fooddiary.FoodDiaryApplication
 import com.fooddiary.R
 import com.fooddiary.model.Meal
 import com.fooddiary.model.MealType
 import com.fooddiary.viewmodel.MealViewModel
 import java.io.File
-import java.io.FileOutputStream
-import androidx.compose.foundation.clickable
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.graphics.ColorFilter
-
-private fun Context.createImageUri(): Uri {
-    val imagesDir = File(filesDir, "images").apply { mkdirs() }
-    val imageFile = File(imagesDir, "meal_${System.currentTimeMillis()}.jpg")
-    return FileProvider.getUriForFile(
-        this,
-        "${packageName}.fileprovider",
-        imageFile
-    )
-}
+import java.text.SimpleDateFormat
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,7 +65,7 @@ fun AddMealScreen(
 
     val isEditMode = existingMeal != null
     var selectedMealType by remember {
-        mutableStateOf(existingMeal?.type)
+        mutableStateOf<MealType?>(existingMeal?.type)
     }
     var description by remember { mutableStateOf(existingMeal?.description ?: "") }
     var notes by remember { mutableStateOf(existingMeal?.notes ?: "") }
@@ -83,19 +73,44 @@ fun AddMealScreen(
     var showPhotoPicker by remember { mutableStateOf(false) }
     var showErrorDialog by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
+    var currentPhotoFile by remember { mutableStateOf<File?>(null) }
+
+    fun createNewImageFile(): File {
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val storageDir = context.getExternalFilesDir("images")
+        return File.createTempFile(
+            "JPEG_${timeStamp}_",
+            ".jpg",
+            storageDir
+        ).also { currentPhotoFile = it }
+    }
+
+    fun getPhotoUri(): Uri {
+        currentPhotoFile?.delete()
+        val newFile = createNewImageFile()
+        return FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            newFile
+        )
+    }
 
     val cameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { success ->
-        if (!success) photoUri = null
+        if (success) {
+            photoUri = currentPhotoFile?.let { Uri.fromFile(it) }
+        } else {
+            currentPhotoFile?.delete()
+            currentPhotoFile = null
+        }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            val uri = context.createImageUri()
-            photoUri = uri
+            val uri = getPhotoUri()
             cameraLauncher.launch(uri)
         } else {
             Toast.makeText(context, "Permission nécessaire pour utiliser la caméra", Toast.LENGTH_SHORT).show()
@@ -108,8 +123,7 @@ fun AddMealScreen(
                 context,
                 Manifest.permission.CAMERA
             ) == PackageManager.PERMISSION_GRANTED -> {
-                val uri = context.createImageUri()
-                photoUri = uri
+                val uri = getPhotoUri()
                 cameraLauncher.launch(uri)
             }
             (context as Activity).shouldShowRequestPermissionRationale(Manifest.permission.CAMERA) -> {
@@ -121,37 +135,10 @@ fun AddMealScreen(
         }
     }
 
-    fun isUriValid(uri: Uri?): Boolean {
-        return try {
-            uri?.let { context.contentResolver.openInputStream(it)?.close() }
-            uri != null
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    fun copyImageToAppStorage(uri: Uri): Uri? {
-        return try {
-            val inputStream = context.contentResolver.openInputStream(uri) ?: return null
-            val imagesDir = File(context.filesDir, "images").apply { mkdirs() }
-            val outputFile = File(imagesDir, "img_${System.currentTimeMillis()}.jpg")
-            inputStream.use { input -> FileOutputStream(outputFile).use { output -> input.copyTo(output) } }
-            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", outputFile)
-        } catch (e: Exception) {
-            null
-        }
-    }
-
     val galleryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        uri?.let {
-            try {
-                photoUri = copyImageToAppStorage(it) ?: it
-            } catch (e: Exception) {
-                photoUri = it
-            }
-        }
+        uri?.let { photoUri = it }
     }
 
     fun validateFields(): Boolean {
@@ -164,14 +151,13 @@ fun AddMealScreen(
                 errorMessage = "Veuillez saisir une description"
                 false
             }
-            photoUri == null || !isUriValid(photoUri) -> {
-                errorMessage = "Veuillez ajouter une photo valide"
+            photoUri == null -> {
+                errorMessage = "Veuillez ajouter une photo"
                 false
             }
             else -> true
         }
     }
-
     if (showPhotoPicker) {
         AlertDialog(
             onDismissRequest = { showPhotoPicker = false },
@@ -229,150 +215,150 @@ fun AddMealScreen(
             )
         },
         content = { innerPadding ->
-            val focusManager = LocalFocusManager.current
-
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clickable { focusManager.clearFocus() } // Ferme le clavier quand on tape ailleurs
+                    .padding(innerPadding)
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState())
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .padding(16.dp)
-                        .verticalScroll(rememberScrollState())
+                Text(
+                    text = "Type de repas",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = "Type de repas*",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        MealType.entries.forEach { type ->
-                            MealTypeOption(
-                                type = type,
-                                isSelected = selectedMealType == type, // Comparaison avec nullable
-                                onSelect = { selectedMealType = it }
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(24.dp))
-
-                    OutlinedTextField(
-                        value = description,
-                        onValueChange = { description = it },
-                        label = { Text("Description*") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = false,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-
-                    Spacer(Modifier.height(24.dp))
-
-                    Text(
-                        text = "Photo du repas*",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp)
-                            .border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outline,
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .clickable { showPhotoPicker = true },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (photoUri != null && isUriValid(photoUri)) {
-                            Image(
-                                painter = rememberAsyncImagePainter(photoUri),
-                                contentDescription = "Photo du repas",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.AddPhotoAlternate,
-                                    contentDescription = "Ajouter photo",
-                                    modifier = Modifier.size(48.dp),
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    text = "Ajouter une photo",
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(24.dp))
-
-                    OutlinedTextField(
-                        value = notes,
-                        onValueChange = { notes = it },
-                        label = { Text("Remarques (optionnel)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = false,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-
-                    Spacer(Modifier.height(32.dp))
-
-                    Text(
-                        text = "* Champs obligatoires",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-
-                    Button(
-                        onClick = {
-                            if (validateFields()) {
-                                viewModel.updateMeal(
-                                    day = day,
-                                    mealIndex = mealIndex,
-                                    meal = Meal(
-                                        type = selectedMealType!!, // !! car on a vérifié qu'il n'est pas null
-                                        description = description,
-                                        photoUri = photoUri?.toString(),
-                                        notes = notes.takeIf { it.isNotBlank() },
-                                        mealIndex = mealIndex,
-                                        day = day
-                                    )
-                                )
-                                navController.popBackStack()
-                            } else {
-                                showErrorDialog = true
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(
-                            if (isEditMode) "Mettre à jour" else "Enregistrer",
-                            style = MaterialTheme.typography.bodyLarge
+                    MealType.entries.forEach { type ->
+                        MealTypeOption(
+                            type = type,
+                            isSelected = selectedMealType == type,
+                            onSelect = { selectedMealType = it }
                         )
                     }
                 }
+
+                Spacer(Modifier.height(24.dp))
+
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Description*") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = false,
+                    shape = RoundedCornerShape(8.dp)
+                )
+
+                Spacer(Modifier.height(24.dp))
+
+                Text(
+                    text = "Photo du repas*",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outline,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .clickable { showPhotoPicker = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (photoUri != null) {
+                        Image(
+                            painter = rememberAsyncImagePainter(
+                                ImageRequest.Builder(context)
+                                    .data(photoUri)
+                                    .crossfade(true)
+                                    .size(800, 800)
+                                    .build(),
+                                imageLoader = (context.applicationContext as FoodDiaryApplication).imageLoader
+                            ),
+                            contentDescription = "Photo du repas",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AddPhotoAlternate,
+                                contentDescription = "Ajouter photo",
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = "Ajouter une photo",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(24.dp))
+
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text("Remarques (optionnel)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = false,
+                    shape = RoundedCornerShape(8.dp)
+                )
+
+                Spacer(Modifier.height(32.dp))
+
+                Text(
+                    text = "* Champs obligatoires",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                Button(
+                    onClick = {
+                        if (validateFields()) {
+                            viewModel.updateMeal(
+                                day = day,
+                                mealIndex = mealIndex,
+                                meal = Meal(
+                                    type = selectedMealType!!,
+                                    description = description,
+                                    photoUri = photoUri.toString(),
+                                    notes = notes.takeIf { it.isNotBlank() },
+                                    mealIndex = mealIndex,
+                                    day = day
+                                )
+                            )
+                            navController.popBackStack()
+                        } else {
+                            showErrorDialog = true
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        if (isEditMode) "Mettre à jour" else "Enregistrer",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
             }
-        })
+        }
+    )
 }
 
 @Composable
@@ -399,19 +385,22 @@ fun MealTypeOption(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .size(64.dp)
-                .background(Color.Transparent, CircleShape)
+                .background(
+                    color = Color.Transparent,
+                    shape = CircleShape
+                )
                 .border(
-                    2.dp,
-                    if (isSelected) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.outline, // Utilise la couleur outline du thème
-                    CircleShape
+                    width = 2.dp,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary
+                    else Color.LightGray,
+                    shape = CircleShape
                 )
         ) {
             Image(
                 painter = painterResource(id = iconRes),
                 contentDescription = label,
-                modifier = Modifier.size(32.dp))
-
+                modifier = Modifier.size(32.dp)
+            )
         }
         Spacer(Modifier.height(4.dp))
         Text(

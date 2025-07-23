@@ -3,8 +3,8 @@ package com.fooddiary.ui.theme
 import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -15,7 +15,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 
@@ -37,8 +36,8 @@ private val LightColorScheme = lightColorScheme(
     primary = Color(0xFF6200EE),
     secondary = Color(0xFF03DAC6),
     tertiary = Color(0xFF3700B3),
-    background = Color(0xFFFFFFFF),
-    surface = Color(0xFFFFFFFF),
+    background = Color(0xFFF5F5F5),
+    surface = Color.White,
     onPrimary = Color.White,
     onSecondary = Color.Black,
     onBackground = Color(0xFF1C1B1F),
@@ -76,7 +75,7 @@ fun FoodDiaryTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
-        shapes = Shapes(
+        shapes = MaterialTheme.shapes.copy(
             extraSmall = RoundedCornerShape(4.dp),
             small = RoundedCornerShape(8.dp),
             medium = RoundedCornerShape(12.dp),
