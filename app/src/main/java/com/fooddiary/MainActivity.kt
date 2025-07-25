@@ -27,6 +27,11 @@ import com.fooddiary.ui.theme.FoodDiaryTheme
 import com.fooddiary.screens.RecapScreen
 import com.fooddiary.screens.ExportScreen
 import com.fooddiary.viewmodel.MealViewModel
+import com.fooddiary.screens.SplashScreen
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
+import androidx.core.view.WindowCompat
+import androidx.compose.foundation.layout.systemBarsPadding
 
 
 class MainActivity : ComponentActivity() {
@@ -42,6 +47,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
         setContent {
             FoodDiaryTheme {
                 Box(
@@ -63,32 +70,38 @@ fun FoodDiaryApp(viewModel: MealViewModel) {
 
     NavHost(
         navController = navController,
-        startDestination = "home",
+        startDestination = "splash",
         modifier = Modifier.fillMaxSize()
     ) {
-        composable("home") {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background
-            ) {
-                HomeScreen(
-                    navController = navController,
-                    viewModel = viewModel,
-                    onMealClick = { day, mealIndex ->
-                        navController.navigate("mealDetail/$day/$mealIndex")
-                    },
-                    onAddMealClick = { day, mealIndex ->
-                        navController.navigate("addMeal/$day/$mealIndex")
-                    },
-                    onDayClick = { day ->
-                        navController.navigate("dayMeals/$day")
-                    },
-                    onRecapClick = {
-                        navController.navigate("recap")
-                    }
-                )
+        composable("splash") {
+            SplashScreen()
+            LaunchedEffect(Unit) {
+                delay(2000) // Affiche le splash screen pendant 2 secondes
+                navController.navigate("home") {
+                    popUpTo("splash") { inclusive = true }
+                }
             }
         }
+
+        composable("home") {
+            HomeScreen(
+                navController = navController,
+                viewModel = viewModel,
+                onMealClick = { day, mealIndex ->
+                    navController.navigate("mealDetail/$day/$mealIndex")
+                },
+                onAddMealClick = { day, mealIndex ->
+                    navController.navigate("addMeal/$day/$mealIndex")
+                },
+                onDayClick = { day ->
+                    navController.navigate("dayMeals/$day")
+                },
+                onRecapClick = {
+                    navController.navigate("recap")
+                }
+            )
+        }
+
 
         composable("recap") {
             Surface(

@@ -68,7 +68,7 @@ dependencies {
     // Coil
     implementation("io.coil-kt:coil-compose:2.4.0")
 
-
+    implementation("com.google.accompanist:accompanist-permissions:0.30.1")
     implementation("com.itextpdf:itext7-core:7.2.5")
     implementation("androidx.compose.ui:ui-tooling:1.5.4")
     implementation("androidx.compose.foundation:foundation:1.5.4")

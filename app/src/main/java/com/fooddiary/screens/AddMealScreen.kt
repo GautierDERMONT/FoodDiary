@@ -146,6 +146,27 @@ fun AddMealScreen(
         uri?.let { photoUri = it }
     }
 
+    fun saveImagePermanently(context: Context, tempUri: Uri): Uri? {
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val fileName = "JPEG_${timeStamp}_${System.currentTimeMillis()}.jpg"
+        val storageDir = context.getExternalFilesDir(null) // Répertoire permanent
+
+        return try {
+            val inputStream = context.contentResolver.openInputStream(tempUri)
+            val outputFile = File(storageDir, fileName)
+            inputStream?.use { input ->
+                outputFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            Uri.fromFile(outputFile)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+
     fun validateFields(): Boolean {
         return when {
             selectedMealType == null -> {
@@ -336,13 +357,16 @@ fun AddMealScreen(
                 Button(
                     onClick = {
                         if (validateFields()) {
+                            val permanentPhotoUri = photoUri?.let { uri ->
+                                saveImagePermanently(context, uri)
+                            }
                             viewModel.updateMeal(
                                 day = day,
                                 mealIndex = mealIndex,
                                 meal = Meal(
                                     type = selectedMealType!!,
                                     description = description,
-                                    photoUri = photoUri.toString(),
+                                    photoUri = permanentPhotoUri?.toString(), // Utilisez l'URI permanent
                                     notes = notes.takeIf { it.isNotBlank() },
                                     mealIndex = mealIndex,
                                     day = day
@@ -358,10 +382,7 @@ fun AddMealScreen(
                         .height(50.dp),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text(
-                        if (isEditMode) "Mettre à jour" else "Enregistrer",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
+                    Text(if (isEditMode) "Mettre à jour" else "Enregistrer")
                 }
             }
         }
