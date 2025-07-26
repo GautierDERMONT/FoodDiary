@@ -19,6 +19,35 @@ fun getCurrentDayShort(): String {
     }
 }
 
+// Ajoutez ces nouvelles fonctions à DateUtils.kt
+
+fun getCurrentWeekNumber(): Int {
+    val calendar = Calendar.getInstance().apply {
+        firstDayOfWeek = Calendar.MONDAY
+    }
+    return calendar.get(Calendar.WEEK_OF_YEAR)
+}
+
+fun getWeekRange(): String {
+    val calendar = Calendar.getInstance().apply {
+        firstDayOfWeek = Calendar.MONDAY
+    }
+
+    // Début de semaine (lundi)
+    calendar.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+    val startDate = SimpleDateFormat("d MMMM", Locale.FRENCH).format(calendar.time)
+
+    // Fin de semaine (dimanche)
+    calendar.add(Calendar.DAY_OF_YEAR, 6)
+    val endDate = SimpleDateFormat("d MMMM yyyy", Locale.FRENCH).format(calendar.time)
+
+    return "$startDate au $endDate"
+}
+
+fun getCurrentWeekInfo(): String {
+    return "Semaine ${getCurrentWeekNumber()} (${getWeekRange()})"
+}
+
 fun getFormattedDate(dayShort: String): String {
     val calendar = Calendar.getInstance().apply {
         firstDayOfWeek = Calendar.MONDAY
@@ -39,4 +68,5 @@ fun getFormattedDate(dayShort: String): String {
     }
 
     return SimpleDateFormat("EEEE d MMMM yyyy", Locale.FRENCH).format(calendar.time)
+
 }

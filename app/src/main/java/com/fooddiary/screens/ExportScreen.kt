@@ -3,12 +3,6 @@ package com.fooddiary.screens
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.RectF
-import android.graphics.Typeface
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
@@ -52,6 +46,13 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlinx.coroutines.delay
+import com.fooddiary.utils.getCurrentWeekInfo
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.RectF
 
 
 
@@ -277,8 +278,8 @@ private fun generatePreviewBitmap(
         // Date
         paint.textSize = 12f * density
         paint.typeface = Typeface.DEFAULT
-        val date = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
-        canvas.drawText(date, 20f * density, yPos, paint)
+        val weekInfo = getCurrentWeekInfo()
+        canvas.drawText(weekInfo, 20f * density, yPos, paint)
         yPos += 30f * density
 
         // Mini tableau
@@ -352,14 +353,7 @@ private suspend fun createExportFile(
     }
 }
 
-private fun createSquareBitmap(context: Context, source: Bitmap, targetSize: Int): Bitmap {
-    val size = minOf(source.width, source.height)
-    val x = (source.width - size) / 2
-    val y = (source.height - size) / 2
 
-    val squareBitmap = Bitmap.createBitmap(source, x, y, size, size)
-    return Bitmap.createScaledBitmap(squareBitmap, targetSize, targetSize, true)
-}
 
 private suspend fun createPdf(file: File, weekMeals: List<DayMeals>, context: Context): Boolean = withContext(Dispatchers.IO) {
     try {
@@ -377,7 +371,7 @@ private suspend fun createPdf(file: File, weekMeals: List<DayMeals>, context: Co
                     )
 
                     document.add(
-                        Paragraph(SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()))
+                        Paragraph(getCurrentWeekInfo())
                             .setTextAlignment(TextAlignment.CENTER)
                             .setFontSize(12f)
                             .setMarginBottom(20f)
@@ -387,11 +381,20 @@ private suspend fun createPdf(file: File, weekMeals: List<DayMeals>, context: Co
                         .useAllAvailableWidth()
                         .setMarginTop(10f)
 
+                    // Style pour les en-têtes
                     val headerStyle = com.itextpdf.layout.Style()
                         .setBold()
                         .setFontSize(12f)
                         .setBackgroundColor(com.itextpdf.kernel.colors.ColorConstants.LIGHT_GRAY)
+                        .setTextAlignment(TextAlignment.CENTER)
+                        .setPadding(5f)
 
+                    // Style pour le contenu centré verticalement
+                    val contentStyle = com.itextpdf.layout.Style()
+                        .setTextAlignment(TextAlignment.CENTER)
+                        .setPadding(5f)
+
+                    // En-têtes
                     table.addHeaderCell(Paragraph("Jour").addStyle(headerStyle))
                     table.addHeaderCell(Paragraph("Repas").addStyle(headerStyle))
                     table.addHeaderCell(Paragraph("Description").addStyle(headerStyle))
@@ -400,32 +403,51 @@ private suspend fun createPdf(file: File, weekMeals: List<DayMeals>, context: Co
                     weekMeals.forEach { dayMeals ->
                         dayMeals.meals.forEach { meal ->
                             if (!meal.isVierge()) {
-                                table.addCell(Paragraph(dayMeals.day).setPadding(5f))
-                                table.addCell(Paragraph(meal.type.toString()).setPadding(5f))
+                                // Cellule pour le jour (centrée verticalement)
+                                val dayCell = com.itextpdf.layout.element.Cell()
+                                    .add(Paragraph(dayMeals.day).addStyle(contentStyle))
+                                    .setVerticalAlignment(com.itextpdf.layout.properties.VerticalAlignment.MIDDLE)
+                                table.addCell(dayCell)
 
+                                // Cellule pour le type de repas (centrée verticalement)
+                                val typeCell = com.itextpdf.layout.element.Cell()
+                                    .add(Paragraph(meal.type.toFrenchString()).addStyle(contentStyle))
+                                    .setVerticalAlignment(com.itextpdf.layout.properties.VerticalAlignment.MIDDLE)
+                                table.addCell(typeCell)
+
+                                // Cellule pour la description (centrée verticalement)
                                 val description = buildString {
                                     append(meal.description)
                                     if (!meal.notes.isNullOrBlank()) {
                                         append("\n\nNotes: ${meal.notes}")
                                     }
                                 }
-                                table.addCell(Paragraph(description).setPadding(5f))
+                                val descCell = com.itextpdf.layout.element.Cell()
+                                    .add(Paragraph(description).addStyle(contentStyle))
+                                    .setVerticalAlignment(com.itextpdf.layout.properties.VerticalAlignment.MIDDLE)
+                                table.addCell(descCell)
 
-                                val cell = com.itextpdf.layout.element.Cell()
+                                // Cellule pour la photo (version originale)
+                                val photoCell = com.itextpdf.layout.element.Cell()
+                                    .addStyle(contentStyle)
+                                    .setVerticalAlignment(com.itextpdf.layout.properties.VerticalAlignment.MIDDLE)
+
                                 meal.photoUri?.let { uriString ->
                                     try {
                                         val filePath = uriString.removePrefix("file://")
                                         val imageData = ImageDataFactory.create(filePath)
-                                        cell.add(
+                                        photoCell.add(
                                             com.itextpdf.layout.element.Image(imageData)
                                                 .setWidth(100f)
                                                 .setHeight(100f)
+                                                .setHorizontalAlignment(com.itextpdf.layout.properties.HorizontalAlignment.CENTER)
                                         )
                                     } catch (e: Exception) {
-                                        cell.add(Paragraph("(image)"))
+                                        photoCell.add(Paragraph("(image)").addStyle(contentStyle))
                                     }
-                                } ?: cell.add(Paragraph("-"))
-                                table.addCell(cell.setPadding(5f))
+                                } ?: photoCell.add(Paragraph("-").addStyle(contentStyle))
+
+                                table.addCell(photoCell)
                             }
                         }
                     }
@@ -436,202 +458,232 @@ private suspend fun createPdf(file: File, weekMeals: List<DayMeals>, context: Co
         }
         true
     } catch (e: Exception) {
+        e.printStackTrace()
         false
     }
 }
 
-private fun createSquareBitmap(source: Bitmap, targetSize: Int): Bitmap {
-    val size = minOf(source.width, source.height)
-    val x = (source.width - size) / 2
-    val y = (source.height - size) / 2
 
-    val squareBitmap = Bitmap.createBitmap(source, x, y, size, size)
-    return Bitmap.createScaledBitmap(squareBitmap, targetSize, targetSize, true)
-}
 
 private suspend fun createImage(file: File, weekMeals: List<DayMeals>, context: Context): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val density = context.resources.displayMetrics.density
-            val width = (800 * density).toInt()
-            val height = calculateRequiredHeight(weekMeals, density) + 500 // Marge supplémentaire pour le tableau
+    try {
+        val density = context.resources.displayMetrics.density
+        val pageWidth = (595 * density).toInt()
+        val margin = (20 * density).toInt()
+        var yPos = margin
 
-            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(bitmap)
-            canvas.drawColor(android.graphics.Color.WHITE)
+        val bitmap = Bitmap.createBitmap(pageWidth, calculateRequiredHeight(weekMeals, density), Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawColor(android.graphics.Color.WHITE)
 
-            val paint = Paint().apply {
-                color = android.graphics.Color.BLACK
-                isAntiAlias = true
-            }
+        val titlePaint = Paint().apply {
+            color = android.graphics.Color.BLACK
+            textSize = 24f * density
+            typeface = Typeface.DEFAULT_BOLD
+            isAntiAlias = true
+        }
 
-            var yPos = 50f * density
+        val headerPaint = Paint().apply {
+            color = android.graphics.Color.BLACK
+            textSize = 14f * density
+            typeface = Typeface.DEFAULT_BOLD
+            isAntiAlias = true
+        }
 
-            // Titre
-            paint.textSize = 24f * density
-            paint.typeface = Typeface.DEFAULT_BOLD
-            canvas.drawText("Récapitulatif des repas", 40f * density, yPos, paint)
-            yPos += 40f * density
+        val textPaint = Paint().apply {
+            color = android.graphics.Color.BLACK
+            textSize = 12f * density
+            typeface = Typeface.DEFAULT
+            isAntiAlias = true
+        }
 
-            // Date
-            paint.textSize = 16f * density
-            paint.typeface = Typeface.DEFAULT
-            val dateStr = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
-            canvas.drawText(dateStr, 40f * density, yPos, paint)
-            yPos += 40f * density
+        val linePaint = Paint().apply {
+            color = android.graphics.Color.BLACK
+            strokeWidth = 1f * density
+            isAntiAlias = true
+        }
 
-            // En-têtes du tableau
-            paint.textSize = 14f * density
-            paint.typeface = Typeface.DEFAULT_BOLD
-            val columnWidth = (width - 80 * density) / 4f
+        val rowPaint = Paint().apply {
+            style = Paint.Style.FILL
+            isAntiAlias = true
+        }
 
-            // Ligne de séparation
-            paint.strokeWidth = 2f * density
-            canvas.drawLine(40f * density, yPos, width - 40f * density, yPos, paint)
-            yPos += 5f * density
+        canvas.drawText("Récapitulatif des repas", margin.toFloat(), yPos.toFloat(), titlePaint)
+        yPos += (30 * density).toInt()
 
-            // Dessiner les en-têtes
-            canvas.drawText("Jour", 40f * density, yPos, paint)
-            canvas.drawText("Repas", 40f * density + columnWidth, yPos, paint)
-            canvas.drawText("Description", 40f * density + columnWidth * 2, yPos, paint)
-            canvas.drawText("Photo", 40f * density + columnWidth * 3, yPos, paint)
-            yPos += 30f * density
+        canvas.drawText(getCurrentWeekInfo(), margin.toFloat(), yPos.toFloat(), textPaint)
+        yPos += (40 * density).toInt()
 
-            // Ligne de séparation
-            canvas.drawLine(40f * density, yPos, width - 40f * density, yPos, paint)
-            yPos += 15f * density
+        val columnWidth = (pageWidth - 2 * margin) / 4f
+        val headerHeight = (30 * density).toInt()
+        val rowHeight = (100 * density).toInt()
+        val imageSize = (80 * density).toInt()
 
-            // Contenu du tableau
-            paint.textSize = 12f * density
-            paint.typeface = Typeface.DEFAULT
-            val rowPaint = Paint().apply {
-                style = Paint.Style.FILL
-            }
+        rowPaint.color = android.graphics.Color.LTGRAY
+        canvas.drawRect(
+            margin.toFloat(),
+            yPos.toFloat(),
+            (pageWidth - margin).toFloat(),
+            (yPos + headerHeight).toFloat(),
+            rowPaint
+        )
 
-            weekMeals.forEach { dayMeals ->
-                if (dayMeals.meals.any { !it.isVierge() }) {
-                    dayMeals.meals.forEach { meal ->
-                        if (!meal.isVierge()) {
-                            // Couleur de fond alternée
-                            rowPaint.color = if ((yPos / (30 * density)).toInt() % 2 == 0) {
-                                android.graphics.Color.parseColor("#F5F5F5")
-                            } else {
-                                android.graphics.Color.WHITE
-                            }
+        canvas.drawText("Jour", margin.toFloat(), (yPos + 20 * density).toFloat(), headerPaint)
+        canvas.drawText("Repas", (margin + columnWidth).toFloat(), (yPos + 20 * density).toFloat(), headerPaint)
+        canvas.drawText("Description", (margin + columnWidth * 2).toFloat(), (yPos + 20 * density).toFloat(), headerPaint)
+        canvas.drawText("Photo", (margin + columnWidth * 3).toFloat(), (yPos + 20 * density).toFloat(), headerPaint)
+        yPos += headerHeight
 
-                            canvas.drawRect(
-                                40f * density,
-                                yPos - 15f * density,
-                                width - 40f * density,
-                                yPos + 60f * density,
-                                rowPaint
-                            )
+        canvas.drawLine(
+            margin.toFloat(),
+            yPos.toFloat(),
+            (pageWidth - margin).toFloat(),
+            yPos.toFloat(),
+            linePaint
+        )
+        yPos += (10 * density).toInt()
 
-                            // Jour
-                            canvas.drawText(dayMeals.day, 40f * density, yPos, paint)
+        weekMeals.forEach { dayMeals ->
+            dayMeals.meals.forEach { meal ->
+                if (!meal.isVierge()) {
+                    rowPaint.color = if ((yPos / rowHeight) % 2 == 0) {
+                        android.graphics.Color.parseColor("#F8F8F8")
+                    } else {
+                        android.graphics.Color.WHITE
+                    }
 
-                            // Type de repas
-                            canvas.drawText(meal.type.toString(), 40f * density + columnWidth, yPos, paint)
+                    canvas.drawRect(
+                        margin.toFloat(),
+                        yPos.toFloat(),
+                        (pageWidth - margin).toFloat(),
+                        (yPos + rowHeight).toFloat(),
+                        rowPaint
+                    )
 
-                            // Description + notes
-                            val description = if (!meal.notes.isNullOrBlank()) {
-                                "${meal.description}\nNotes: ${meal.notes}"
-                            } else {
-                                meal.description
-                            }
-                            drawMultilineText(canvas, description, 40f * density + columnWidth * 2, yPos, paint, columnWidth - 20 * density)
+                    canvas.drawText(dayMeals.day, margin.toFloat(), (yPos + 30 * density).toFloat(), textPaint)
+                    canvas.drawText(meal.type.toFrenchString(), (margin + columnWidth).toFloat(), (yPos + 30 * density).toFloat(), textPaint)
 
-                            // Photo
-                            meal.photoUri?.let { uriString ->
-                                try {
-                                    val uri = Uri.parse(uriString)
-                                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                                        val options = BitmapFactory.Options().apply {
-                                            inSampleSize = 4
-                                        }
-                                        val mealBitmap = BitmapFactory.decodeStream(inputStream, null, options)
-                                        mealBitmap?.let {
-                                            try {
-                                                // Taille fixe pour les images dans l'export image (150x150)
-                                                val squareBitmap = createSquareBitmap(it, (150 * density).toInt())
+                    val description = if (!meal.notes.isNullOrBlank()) {
+                        "${meal.description}\nNotes: ${meal.notes}"
+                    } else {
+                        meal.description
+                    }
+                    drawMultilineText(
+                        canvas = canvas,
+                        text = description,
+                        x = margin + columnWidth * 2,
+                        y = yPos + (20 * density).toInt(),
+                        paint = textPaint,
+                        maxWidth = columnWidth - (10 * density),
+                        lineHeight = 20f * density
+                    )
 
-                                                canvas.drawBitmap(
-                                                    squareBitmap,
-                                                    null,
-                                                    RectF(
-                                                        40f * density + columnWidth * 3 + 10 * density,
-                                                        yPos - 10f * density,
-                                                        40f * density + columnWidth * 3 + 10 * density + 150 * density,
-                                                        yPos - 10f * density + 150 * density
-                                                    ),
-                                                    null
-                                                )
-                                            } finally {
-                                                it.recycle()
-                                            }
-                                        }
+                    meal.photoUri?.let { uriString ->
+                        try {
+                            val uri = Uri.parse(uriString)
+                            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                                val options = BitmapFactory.Options().apply {
+                                    inSampleSize = 2
+                                }
+                                BitmapFactory.decodeStream(inputStream, null, options)?.let { originalBitmap ->
+                                    try {
+                                        val scaledBitmap = Bitmap.createScaledBitmap(
+                                            originalBitmap,
+                                            imageSize,
+                                            imageSize,
+                                            true
+                                        )
+                                        canvas.drawBitmap(
+                                            scaledBitmap,
+                                            margin + columnWidth * 3 + (columnWidth - imageSize) / 2,
+                                            yPos + (rowHeight - imageSize) / 2f,
+                                            null
+                                        )
+                                    } finally {
+                                        originalBitmap.recycle()
                                     }
-                                } catch (e: Exception) {
-                                    canvas.drawText("-", 40f * density + columnWidth * 3, yPos, paint)
                                 }
                             }
-                            yPos += 70f * density // Hauteur de ligne
+                        } catch (e: Exception) {
+                            canvas.drawText("-", margin + columnWidth * 3, (yPos + 30 * density).toFloat(), textPaint)
                         }
+                    } ?: run {
+                        canvas.drawText("-", margin + columnWidth * 3, (yPos + 30 * density).toFloat(), textPaint)
                     }
+
+                    yPos += rowHeight
                 }
             }
-
-            FileOutputStream(file).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
-            }
-            bitmap.recycle()
-
-            true
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
         }
-    }
 
-// Fonction helper pour dessiner du texte multiligne
-private fun drawMultilineText(canvas: Canvas, text: String, x: Float, startY: Float, paint: Paint, maxWidth: Float) {
-    var y = startY
-    val lines = text.split("\n")
-    val lineHeight = paint.textSize * 1.2f
+        FileOutputStream(file).use { out ->
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+        }
+        bitmap.recycle()
 
-    lines.forEach { line ->
-        canvas.drawText(line, x, y, paint)
-        y += lineHeight
+        true
+    } catch (e: Exception) {
+        e.printStackTrace()
+        false
     }
 }
 
+// Fonction helper améliorée pour le texte multiligne
+private fun drawMultilineText(
+    canvas: Canvas,
+    text: String,
+    x: Float,
+    y: Int,
+    paint: Paint,
+    maxWidth: Float,
+    lineHeight: Float
+) {
+    var currentY = y.toFloat()
+    val lines = text.split("\n")
+
+    lines.forEach { line ->
+        // Si la ligne est trop longue, on la découpe
+        if (paint.measureText(line) > maxWidth) {
+            var start = 0
+            var end: Int
+            while (start < line.length) {
+                end = paint.breakText(line, start, line.length, true, maxWidth, null)
+                canvas.drawText(line.substring(start, start + end), x, currentY, paint)
+                currentY += lineHeight
+                start += end
+            }
+        } else {
+            canvas.drawText(line, x, currentY, paint)
+            currentY += lineHeight
+        }
+    }
+}
+
+// Calcul de la hauteur nécessaire
 private fun calculateRequiredHeight(weekMeals: List<DayMeals>, density: Float): Int {
-    var height = 150f * density
+    var height = (150 * density).toInt() // Marge pour le titre et en-têtes
 
     weekMeals.forEach { dayMeals ->
-        if (dayMeals.meals.any { !it.isVierge() }) {
-            height += 50f * density
+        dayMeals.meals.forEach { meal ->
+            if (!meal.isVierge()) {
+                height += (100 * density).toInt() // Hauteur de ligne de base
 
-            dayMeals.meals.forEach { meal ->
-                if (!meal.isVierge()) {
-                    height += 25f * density
+                // Ajout d'espace pour les descriptions longues
+                val description = if (!meal.notes.isNullOrBlank()) {
+                    "${meal.description}\nNotes: ${meal.notes}"
+                } else {
+                    meal.description
+                }
 
-                    if (meal.photoUri != null) {
-                        height += 200f * density
-                    }
-
-                    if (!meal.notes.isNullOrBlank()) {
-                        height += 25f * density
-                    }
-
-                    height += 15f * density
+                val lineCount = description.split("\n").size
+                if (lineCount > 1) {
+                    height += ((lineCount - 1) * 20 * density).toInt()
                 }
             }
-
-            height += 20f * density
         }
     }
 
-    return height.toInt()
+    return height + (20 * density).toInt() // Marge finale
 }
 
 private fun shareFile(context: Context, file: File, format: String) {
@@ -674,7 +726,7 @@ private fun sendToDietician(context: Context, file: File, format: String, email:
         type = "message/rfc822"
         putExtra(Intent.EXTRA_EMAIL, arrayOf(email))
         putExtra(Intent.EXTRA_SUBJECT, "Mon carnet alimentaire")
-        putExtra(Intent.EXTRA_TEXT, "Voici mon carnet alimentaire comme convenu.")
+        putExtra(Intent.EXTRA_TEXT, "Voici mon carnet alimentaire comme convenu. Cordialement.")
         putExtra(Intent.EXTRA_STREAM, uri)
         type = when (format) {
             "PDF" -> "application/pdf"

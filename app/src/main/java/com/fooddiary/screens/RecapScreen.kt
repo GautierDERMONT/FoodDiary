@@ -112,7 +112,7 @@ fun RecapScreen(
                             text = buildAnnotatedString {
                                 append("Aucun repas de type ")
                                 withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                                    append(selectedMealType?.name?.lowercase() ?: "")
+                                    append(selectedMealType?.toFrenchString()?.lowercase() ?: "")
                                 }
                                 append(" cette semaine")
                             },
