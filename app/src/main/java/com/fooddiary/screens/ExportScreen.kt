@@ -3,13 +3,13 @@ package com.fooddiary.screens
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.graphics.*
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
@@ -18,16 +18,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.navigation.NavController
-import com.fooddiary.R
 import com.fooddiary.model.DayMeals
 import com.fooddiary.viewmodel.MealViewModel
 import com.itextpdf.io.image.ImageDataFactory
@@ -40,313 +37,297 @@ import com.itextpdf.layout.properties.TextAlignment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlinx.coroutines.delay
 import com.fooddiary.utils.getCurrentWeekInfo
-import android.graphics.Paint
-import android.graphics.Typeface
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Canvas
-import android.graphics.RectF
 import com.fooddiary.model.Meal
-
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ExportScreen(
-    navController: NavController,
-    viewModel: MealViewModel
-) {
-    val scope = rememberCoroutineScope()
-    val meals by viewModel.weekMeals.collectAsState()
-    var exportFormat by remember { mutableStateOf("PDF") }
-    val formats = listOf("PDF", "Image")
-    val dieticianEmail by viewModel.dieticianEmail.collectAsState()
-    var sendToDietician by remember { mutableStateOf(false) }
+fun ExportScreen(navController: NavController, viewModel: MealViewModel) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val weekMeals by viewModel.weekMeals.collectAsState()
+    val dieticianEmail by viewModel.dieticianEmail.collectAsState()
+
+    var exportFormat by remember { mutableStateOf("PDF") }
+    var sendToDietician by remember { mutableStateOf(false) }
     var showSaveSuccess by remember { mutableStateOf(false) }
     var saveSuccessMessage by remember { mutableStateOf("") }
-    val weekMeals by viewModel.weekMeals.collectAsState()
     var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var isLoading by remember { mutableStateOf(false) }
-    val isDarkTheme = isSystemInDarkTheme()
+    var progress by remember { mutableStateOf(0f) }
 
-
-    LaunchedEffect(weekMeals, exportFormat) { // Retirez isDarkTheme des dépendances
+    LaunchedEffect(weekMeals, exportFormat) {
         isLoading = true
-        previewBitmap = generatePreviewBitmap(
-            weekMeals = weekMeals,
-            context = context,
-            format = exportFormat,
-            isDarkTheme = false, // Forcer false
-            forPreview = true
-        )
+        previewBitmap = generatePreviewBitmap(weekMeals, context, exportFormat)
         isLoading = false
     }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Exporter",  style = MaterialTheme.typography.titleLarge.copy(
-                    fontWeight = FontWeight.Bold
-                )) },
+                title = { Text("Exporter", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Retour")
+                        Icon(Icons.Default.ArrowBack, "Retour")
                     }
                 }
             )
         }
-    ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(16.dp)
-            ) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(300.dp),
-                    elevation = CardDefaults.cardElevation(4.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.surface)
-                            .padding(8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        when {
-                            isLoading -> CircularProgressIndicator()
-                            previewBitmap != null -> Image(
-                                bitmap = previewBitmap!!.asImageBitmap(),
-                                contentDescription = "Preview",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Fit
-                            )
-                            else -> Text("Aucune donnée à afficher")
+    ) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding)) {
+            Column(Modifier.padding(16.dp)) {
+                PreviewCard(previewBitmap, isLoading)
+                FormatSelector(exportFormat) { exportFormat = it }
+                DieticianOptions(sendToDietician, dieticianEmail,
+                    { sendToDietician = it },
+                    { viewModel.updateDieticianEmail(it) }
+                )
+                ActionButtons(
+                    isLoading,
+                    progress,
+                    onShare = {
+                        scope.launch {
+                            isLoading = true
+                            progress = 0f
+                            createAndShare(context, weekMeals, exportFormat, sendToDietician, dieticianEmail) { p ->
+                                progress = p
+                            }
+                            isLoading = false
+                        }
+                    },
+                    onSave = {
+                        scope.launch {
+                            isLoading = true
+                            progress = 0f
+                            saveSuccessMessage = saveFile(context, weekMeals, exportFormat) { p ->
+                                progress = p
+                            } ?: "Erreur lors de l'enregistrement"
+                            showSaveSuccess = true
+                            isLoading = false
                         }
                     }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text("Format d'exportation:", style = MaterialTheme.typography.titleMedium)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    formats.forEach { format ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.selectable(
-                                selected = (format == exportFormat),
-                                onClick = { exportFormat = format }
-                            )
-                        ) {
-                            RadioButton(
-                                selected = (format == exportFormat),
-                                onClick = { exportFormat = format }
-                            )
-                            Text(text = format)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Column {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Checkbox(
-                            checked = sendToDietician,
-                            onCheckedChange = { sendToDietician = it }
-                        )
-                        Text("Envoyer à ma diététicienne")
-                    }
-
-                    if (sendToDietician) {
-                        OutlinedTextField(
-                            value = dieticianEmail,
-                            onValueChange = { viewModel.updateDieticianEmail(it) },
-                            label = { Text("Email de la diététicienne") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Button(
-                        onClick = {
-                            isLoading = true
-                            scope.launch {
-                                val file = createExportFile(context, weekMeals, exportFormat)
-                                file?.let {
-                                    shareFile(context, it, exportFormat)
-                                    if (sendToDietician && dieticianEmail.isNotBlank()) {
-                                        sendToDietician(context, it, exportFormat, dieticianEmail)
-                                    }
-                                }
-                                isLoading = false
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isLoading
-                    ) {
-                        Text("Partager")
-                    }
-
-                    OutlinedButton(
-                        onClick = {
-                            isLoading = true
-                            scope.launch {
-                                val file = createExportFile(context, weekMeals, exportFormat)
-                                file?.let {
-                                    saveSuccessMessage = saveFile(context, it, exportFormat)
-                                        ?: "Erreur lors de l'enregistrement"
-                                    showSaveSuccess = true
-                                }
-                                isLoading = false
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isLoading
-                    ) {
-                        Text("Enregistrer")
-                    }
-                }
+                )
             }
 
             if (showSaveSuccess) {
-                LaunchedEffect(Unit) {
-                    delay(3000)
-                    showSaveSuccess = false
-                }
-                Snackbar(
-                    modifier = Modifier.align(Alignment.BottomCenter)
+                LaunchedEffect(Unit) { delay(3000); showSaveSuccess = false }
+                Snackbar(Modifier.align(Alignment.BottomCenter)) { Text(saveSuccessMessage) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PreviewCard(previewBitmap: Bitmap?, isLoading: Boolean) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(300.dp),
+        elevation = CardDefaults.cardElevation(4.dp)
+    ) {
+        Box(
+            Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            when {
+                isLoading -> CircularProgressIndicator()
+                previewBitmap != null -> Image(
+                    bitmap = previewBitmap!!.asImageBitmap(),
+                    contentDescription = "Preview",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
+                else -> Text("Aucune donnée à afficher")
+            }
+        }
+    }
+}
+
+@Composable
+private fun FormatSelector(currentFormat: String, onFormatChange: (String) -> Unit) {
+    Column {
+        Text("Format d'exportation:", style = MaterialTheme.typography.titleMedium)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            listOf("PDF", "Image").forEach { format ->
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.selectable(selected = (format == currentFormat)) {
+                        onFormatChange(format)
+                    }
                 ) {
-                    Text(saveSuccessMessage)
+                    RadioButton(selected = (format == currentFormat), onClick = { onFormatChange(format) })
+                    Text(format)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DieticianOptions(
+    sendToDietician: Boolean,
+    email: String,
+    onCheckedChange: (Boolean) -> Unit,
+    onEmailChange: (String) -> Unit
+) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = sendToDietician, onCheckedChange = onCheckedChange)
+            Text("Envoyer à ma diététicienne")
+        }
+        if (sendToDietician) {
+            OutlinedTextField(
+                value = email,
+                onValueChange = onEmailChange,
+                label = { Text("Email de la diététicienne") },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+private fun ActionButtons(
+    isLoading: Boolean,
+    progress: Float,
+    onShare: () -> Unit,
+    onSave: () -> Unit
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Button(
+            onClick = onShare,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isLoading
+        ) {
+            if (isLoading) {
+                LinearProgressIndicator(
+                    progress = progress,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                Text("Partager")
+            }
+        }
+
+        OutlinedButton(
+            onClick = onSave,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isLoading
+        ) {
+            if (isLoading) {
+                LinearProgressIndicator(
+                    progress = progress,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                Text("Enregistrer")
+            }
+        }
+    }
+}
+
+private suspend fun createAndShare(
+    context: Context,
+    weekMeals: List<DayMeals>,
+    format: String,
+    sendToDietician: Boolean,
+    email: String,
+    onProgress: (Float) -> Unit = {}
+) {
+    val file = createExportFile(context, weekMeals, format, onProgress) ?: return
+    shareFile(context, file, format)
+    if (sendToDietician && email.isNotBlank()) {
+        sendToDietician(context, file, format, email)
     }
 }
 
 private fun generatePreviewBitmap(
     weekMeals: List<DayMeals>,
     context: Context,
-    format: String,
-    isDarkTheme: Boolean,
-    forPreview: Boolean = true
+    format: String
 ): Bitmap? {
     if (weekMeals.isEmpty() || weekMeals.all { it.meals.isEmpty() }) return null
 
-    return try {
-        val density = context.resources.displayMetrics.density
-        val width = (300 * density).toInt()
-        val height = (400 * density).toInt()
+    val density = context.resources.displayMetrics.density
+    val width = (300 * density).toInt()
+    val height = (400 * density).toInt()
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap).apply { drawColor(Color.WHITE) }
+    val paint = Paint().apply {
+        color = Color.BLACK
+        isAntiAlias = true
+    }
 
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        canvas.drawColor(android.graphics.Color.WHITE)
+    var yPos = 20f * density
 
-        val paint = Paint().apply {
-            color = android.graphics.Color.BLACK
-            isAntiAlias = true
-        }
+    paint.textSize = 16f * density
+    paint.typeface = Typeface.DEFAULT_BOLD
+    canvas.drawText("Prévisualisation", 20f * density, yPos, paint)
+    yPos += 25f * density
 
-        var yPos = 20f * density
+    paint.textSize = 12f * density
+    paint.typeface = Typeface.DEFAULT
+    canvas.drawText(getCurrentWeekInfo(), 20f * density, yPos, paint)
+    yPos += 30f * density
 
-        // Titre
-        paint.textSize = 16f * density
-        paint.typeface = Typeface.DEFAULT_BOLD
-        canvas.drawText("Prévisualisation", 20f * density, yPos, paint)
-        yPos += 25f * density
+    val columnWidth = (width - 40 * density) / 3f
+    paint.textSize = 12f * density
+    paint.typeface = Typeface.DEFAULT_BOLD
+    canvas.drawText("Jour", 20f * density, yPos, paint)
+    canvas.drawText("Repas", 20f * density + columnWidth, yPos, paint)
+    canvas.drawText("Desc.", 20f * density + columnWidth * 2, yPos, paint)
+    yPos += 20f * density
 
-        // Date
-        paint.textSize = 12f * density
-        paint.typeface = Typeface.DEFAULT
-        val weekInfo = getCurrentWeekInfo()
-        canvas.drawText(weekInfo, 20f * density, yPos, paint)
-        yPos += 30f * density
+    paint.strokeWidth = 1f * density
+    canvas.drawLine(20f * density, yPos, width - 20f * density, yPos, paint)
+    yPos += 10f * density
 
-        // Mini tableau
-        val columnWidth = (width - 40 * density) / 3f
-
-        // En-têtes
-        paint.textSize = 12f * density
-        paint.typeface = Typeface.DEFAULT_BOLD
-        canvas.drawText("Jour", 20f * density, yPos, paint)
-        canvas.drawText("Repas", 20f * density + columnWidth, yPos, paint)
-        canvas.drawText("Desc.", 20f * density + columnWidth * 2, yPos, paint)
-        yPos += 20f * density
-
-        // Ligne de séparation
-        paint.strokeWidth = 1f * density
-        canvas.drawLine(20f * density, yPos, width - 20f * density, yPos, paint)
-        yPos += 10f * density
-
-        // Contenu
-        paint.textSize = 10f * density
-        paint.typeface = Typeface.DEFAULT
-
-        weekMeals.take(2).forEach { dayMeals ->
-            dayMeals.meals.take(2).forEach { meal ->
-                if (!meal.isVierge()) {
-                    canvas.drawText(dayMeals.day, 20f * density, yPos, paint)
-                    canvas.drawText(meal.type.toString(), 20f * density + columnWidth, yPos, paint)
-                    canvas.drawText(meal.description.take(15) + if (meal.description.length > 15) "..." else "",
-                        20f * density + columnWidth * 2, yPos, paint)
-                    yPos += 20f * density
-                }
+    paint.textSize = 10f * density
+    paint.typeface = Typeface.DEFAULT
+    weekMeals.take(2).forEach { dayMeals ->
+        dayMeals.meals.take(2).forEach { meal ->
+            if (!meal.isVierge()) {
+                canvas.drawText(dayMeals.day, 20f * density, yPos, paint)
+                canvas.drawText(meal.type.toString(), 20f * density + columnWidth, yPos, paint)
+                canvas.drawText(meal.description.take(15) + if (meal.description.length > 15) "..." else "",
+                    20f * density + columnWidth * 2, yPos, paint)
+                yPos += 20f * density
             }
         }
-
-        if (yPos >= height - 30f * density) {
-            paint.textSize = 10f * density
-            canvas.drawText("...", 20f * density, height - 20f * density, paint)
-        }
-
-        bitmap
-    } catch (e: Exception) {
-        e.printStackTrace()
-        null
     }
+
+    return bitmap
 }
 
 private suspend fun createExportFile(
     context: Context,
     weekMeals: List<DayMeals>,
-    format: String
+    format: String,
+    onProgress: (Float) -> Unit = {}
 ): File? = withContext(Dispatchers.IO) {
     try {
-        val exportDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "exports").apply {
-            mkdirs()
-        }
-
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-        val fileName = "FoodDiary_$timeStamp.${format.lowercase()}"
-        val file = File(exportDir, fileName)
+        val baseName = "FoodDiary_$timeStamp"
+        val exportDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "exports").apply { mkdirs() }
+
+        clearPreviousExports(context, baseName)
+
+        // Correction ici : forcer l'extension .jpg pour les images
+        val fileExtension = if (format == "Image") "jpg" else format.lowercase()
+        val file = File(exportDir, "$baseName.$fileExtension")
 
         when (format) {
-            "PDF" -> createPdf(file, weekMeals, context)
-            "Image" -> createImage(file, weekMeals, context)
-            else -> false
+            "PDF" -> if (!createPdf(file, weekMeals, context, onProgress)) return@withContext null
+            "Image" -> if (!createImage(file, weekMeals, context, onProgress)) return@withContext null
+            else -> return@withContext null
         }
 
         file
@@ -356,109 +337,62 @@ private suspend fun createExportFile(
     }
 }
 
+private fun clearPreviousExports(context: Context, baseName: String) {
+    val exportDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "exports")
+    exportDir.listFiles()?.forEach { file ->
+        if (file.name.startsWith(baseName) && (file.name.endsWith(".jpg") || file.name.endsWith(".pdf") || file.name.endsWith(".image"))) {
+            file.delete()
+        }
+    }
+}
 
-
-private suspend fun createPdf(file: File, weekMeals: List<DayMeals>, context: Context): Boolean = withContext(Dispatchers.IO) {
+private suspend fun createPdf(
+    file: File,
+    weekMeals: List<DayMeals>,
+    context: Context,
+    onProgress: (Float) -> Unit = {}
+): Boolean = withContext(Dispatchers.IO) {
     try {
         PdfWriter(file).use { writer ->
             PdfDocument(writer).use { pdfDocument ->
                 Document(pdfDocument, PageSize.A4).use { document ->
                     document.setMargins(40f, 40f, 40f, 40f)
+                    document.add(Paragraph("Récapitulatif des repas").apply {
+                        setTextAlignment(TextAlignment.CENTER)
+                        setFontSize(18f).setBold().setMarginBottom(10f)
+                    })
+                    document.add(Paragraph(getCurrentWeekInfo()).apply {
+                        setTextAlignment(TextAlignment.CENTER)
+                        setFontSize(12f).setMarginBottom(20f)
+                    })
 
-                    document.add(
-                        Paragraph("Récapitulatif des repas")
-                            .setTextAlignment(TextAlignment.CENTER)
-                            .setFontSize(18f)
-                            .setBold()
-                            .setMarginBottom(10f)
-                    )
+                    val allMeals = weekMeals.flatMap { dayMeals ->
+                        dayMeals.meals.filterNot { it.isVierge() }.map { dayMeals to it }
+                    }
+                    val totalMeals = allMeals.size
+                    var processed = 0
 
-                    document.add(
-                        Paragraph(getCurrentWeekInfo())
-                            .setTextAlignment(TextAlignment.CENTER)
-                            .setFontSize(12f)
-                            .setMarginBottom(20f)
-                    )
+                    val table = com.itextpdf.layout.element.Table(floatArrayOf(15f, 15f, 40f, 30f))
+                        .useAllAvailableWidth().setMarginTop(10f)
 
-                    // Définir les largeurs des colonnes en pourcentage
-                    val columnWidths = floatArrayOf(15f, 15f, 40f, 30f) // Jour, Repas, Description, Photo
-                    val table = com.itextpdf.layout.element.Table(columnWidths)
-                        .useAllAvailableWidth()
-                        .setMarginTop(10f)
-
-                    // Style pour les en-têtes
                     val headerStyle = com.itextpdf.layout.Style()
-                        .setBold()
-                        .setFontSize(12f)
+                        .setBold().setFontSize(12f)
                         .setBackgroundColor(com.itextpdf.kernel.colors.ColorConstants.LIGHT_GRAY)
-                        .setTextAlignment(TextAlignment.CENTER)
-                        .setPadding(5f)
+                        .setTextAlignment(TextAlignment.CENTER).setPadding(5f)
 
-                    // Style pour le contenu centré verticalement
-                    val contentStyle = com.itextpdf.layout.Style()
-                        .setTextAlignment(TextAlignment.LEFT) // Changé de CENTER à LEFT pour la description
-                        .setPadding(5f)
-
-                    // En-têtes
-                    table.addHeaderCell(Paragraph("Jour").addStyle(headerStyle))
-                    table.addHeaderCell(Paragraph("Repas").addStyle(headerStyle))
-                    table.addHeaderCell(Paragraph("Description").addStyle(headerStyle))
-                    table.addHeaderCell(Paragraph("Photo").addStyle(headerStyle))
-
-                    weekMeals.forEach { dayMeals ->
-                        dayMeals.meals.forEach { meal ->
-                            if (!meal.isVierge()) {
-                                // Cellule pour le jour (centrée verticalement)
-                                val dayCell = com.itextpdf.layout.element.Cell()
-                                    .add(Paragraph(dayMeals.day).addStyle(contentStyle))
-                                    .setVerticalAlignment(com.itextpdf.layout.properties.VerticalAlignment.MIDDLE)
-                                table.addCell(dayCell)
-
-                                // Cellule pour le type de repas (centrée verticalement)
-                                val typeCell = com.itextpdf.layout.element.Cell()
-                                    .add(Paragraph(meal.type.toFrenchString()).addStyle(contentStyle))
-                                    .setVerticalAlignment(com.itextpdf.layout.properties.VerticalAlignment.MIDDLE)
-                                table.addCell(typeCell)
-
-                                // Cellule pour la description avec retour à la ligne
-                                val description = buildString {
-                                    append(meal.description)
-                                    if (!meal.notes.isNullOrBlank()) {
-                                        append("\n\nNotes: ${meal.notes}")
-                                    }
-                                }
-                                val descParagraph = Paragraph(description)
-                                    .setFixedLeading(14f) // Espacement entre les lignes
-                                val descCell = com.itextpdf.layout.element.Cell()
-                                    .add(descParagraph.addStyle(contentStyle))
-                                    .setVerticalAlignment(com.itextpdf.layout.properties.VerticalAlignment.MIDDLE)
-                                table.addCell(descCell)
-
-                                // Cellule pour la photo
-                                val photoCell = com.itextpdf.layout.element.Cell()
-                                    .addStyle(contentStyle)
-                                    .setVerticalAlignment(com.itextpdf.layout.properties.VerticalAlignment.MIDDLE)
-
-                                meal.photoUri?.let { uriString ->
-                                    try {
-                                        val filePath = uriString.removePrefix("file://")
-                                        val imageData = ImageDataFactory.create(filePath)
-                                        photoCell.add(
-                                            com.itextpdf.layout.element.Image(imageData)
-                                                .setWidth(100f)
-                                                .setHeight(100f)
-                                                .setHorizontalAlignment(com.itextpdf.layout.properties.HorizontalAlignment.CENTER)
-                                        )
-                                    } catch (e: Exception) {
-                                        photoCell.add(Paragraph("(image)").addStyle(contentStyle))
-                                    }
-                                } ?: photoCell.add(Paragraph("-").addStyle(contentStyle))
-
-                                table.addCell(photoCell)
-                            }
-                        }
+                    listOf("Jour", "Repas", "Description", "Photo").forEach {
+                        table.addHeaderCell(Paragraph(it).addStyle(headerStyle))
                     }
 
+                    allMeals.forEach { (dayMeals, meal) ->
+                        table.addCell(createCell(dayMeals.day))
+                        table.addCell(createCell(meal.type.toFrenchString()))
+                        table.addCell(createDescriptionCell(meal))
+                        table.addCell(createPhotoCell(meal, context))
+
+                        processed++
+                        onProgress(processed.toFloat() / totalMeals)
+                    }
                     document.add(table)
                 }
             }
@@ -470,47 +404,102 @@ private suspend fun createPdf(file: File, weekMeals: List<DayMeals>, context: Co
     }
 }
 
-private suspend fun createImage(file: File, weekMeals: List<DayMeals>, context: Context): Boolean = withContext(Dispatchers.IO) {
+private fun createCell(text: String): com.itextpdf.layout.element.Cell {
+    return com.itextpdf.layout.element.Cell()
+        .add(Paragraph(text).setTextAlignment(TextAlignment.LEFT))
+        .setVerticalAlignment(com.itextpdf.layout.properties.VerticalAlignment.MIDDLE)
+}
+
+private fun createDescriptionCell(meal: Meal): com.itextpdf.layout.element.Cell {
+    val description = buildString {
+        append(meal.description)
+        if (!meal.notes.isNullOrBlank()) append("\n\nNotes: ${meal.notes}")
+    }
+    return com.itextpdf.layout.element.Cell()
+        .add(Paragraph(description).setFixedLeading(14f))
+        .setVerticalAlignment(com.itextpdf.layout.properties.VerticalAlignment.MIDDLE)
+}
+
+private fun createPhotoCell(meal: Meal, context: Context): com.itextpdf.layout.element.Cell {
+    val cell = com.itextpdf.layout.element.Cell()
+        .setVerticalAlignment(com.itextpdf.layout.properties.VerticalAlignment.MIDDLE)
+
+    meal.photoUri?.let { uriString ->
+        try {
+            val imageData = ImageDataFactory.create(uriString.removePrefix("file://"))
+            cell.add(com.itextpdf.layout.element.Image(imageData).setWidth(100f).setHeight(100f))
+        } catch (e: Exception) {
+            cell.add(Paragraph("(image)"))
+        }
+    } ?: cell.add(Paragraph("-"))
+    return cell
+}
+
+private suspend fun createImage(
+    file: File,
+    weekMeals: List<DayMeals>,
+    context: Context,
+    onProgress: (Float) -> Unit = {}
+): Boolean = withContext(Dispatchers.IO) {
     try {
         val density = context.resources.displayMetrics.density
-        val pageWidth = (595 * density).toInt() // A4 width at 72dpi
-        val pageHeight = (842 * density).toInt() // A4 height at 72dpi
+        val pageWidth = (595 * density).toInt()
+        val pageHeight = (842 * density).toInt()
         val margin = (20 * density).toInt()
 
-        // Calculer le nombre de pages nécessaires
-        val pagesInfo = calculatePages(weekMeals, density, pageHeight, margin)
-        val outputFiles = mutableListOf<File>()
-
-        pagesInfo.forEachIndexed { pageIndex, mealsForPage ->
-            val bitmap = Bitmap.createBitmap(pageWidth, pageHeight, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(bitmap)
-            canvas.drawColor(android.graphics.Color.WHITE)
-
-            var yPos = margin
-
-            // Dessiner l'en-tête (titre + date + pagination)
-            drawHeader(canvas, pageIndex, pagesInfo.size, margin, yPos, density)
-            yPos += (70 * density).toInt() // Espace pour l'en-tête
-
-            // Dessiner le tableau
-            yPos = drawTableHeader(canvas, margin, yPos, pageWidth, density)
-
-            // Dessiner les repas de cette page
-            yPos = drawMeals(canvas, mealsForPage, margin, yPos, pageWidth, density, context)
-
-            // Enregistrer la page
-            val pageFile = File(file.parent, "${file.nameWithoutExtension}_${pageIndex+1}.jpg")
-            FileOutputStream(pageFile).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
-            }
-            bitmap.recycle()
-            outputFiles.add(pageFile)
+        val allMeals = weekMeals.flatMap { dayMeals ->
+            dayMeals.meals.filterNot { it.isVierge() }.map { dayMeals to it }
         }
 
-        // Pour la compatibilité, on garde le fichier original comme première page
-        if (outputFiles.isNotEmpty()) {
-            file.delete()
-            outputFiles.first().copyTo(file, true)
+        if (allMeals.isEmpty()) return@withContext false
+
+        val pages = mutableListOf<List<Pair<DayMeals, Meal>>>()
+        var currentPage = mutableListOf<Pair<DayMeals, Meal>>()
+        var currentHeight = margin + (80 * density).toInt()
+        val totalMeals = allMeals.size
+        var processed = 0
+
+        allMeals.forEach { (dayMeals, meal) ->
+            val rowHeight = calculateRowHeight(meal, density, pageWidth, margin)
+
+            if (currentHeight + rowHeight > pageHeight - margin) {
+                pages.add(currentPage)
+                currentPage = mutableListOf(dayMeals to meal)
+                currentHeight = margin + (80 * density).toInt() + rowHeight
+            } else {
+                currentPage.add(dayMeals to meal)
+                currentHeight += rowHeight
+            }
+
+            processed++
+            onProgress(processed.toFloat() / totalMeals)
+        }
+
+        if (currentPage.isNotEmpty()) pages.add(currentPage)
+
+        pages.forEachIndexed { index, meals ->
+            val bitmap = Bitmap.createBitmap(pageWidth, pageHeight, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap).apply { drawColor(Color.WHITE) }
+
+            var yPos = margin
+            drawHeader(canvas, index, pages.size, margin, yPos, density)
+            yPos += (70 * density).toInt()
+
+            yPos = drawTableHeader(canvas, margin, yPos, pageWidth, density)
+            drawMeals(canvas, meals, margin, yPos, pageWidth, density, context)
+
+            val outputFile = if (index == 0) {
+                File(file.parent, "${file.nameWithoutExtension}.jpg")
+            } else {
+                File(file.parent, "${file.nameWithoutExtension}_${index+1}.jpg")
+            }
+
+            FileOutputStream(outputFile).use { out ->
+                if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)) {
+                    throw Exception("Failed to compress bitmap")
+                }
+            }
+            bitmap.recycle()
         }
 
         true
@@ -520,148 +509,105 @@ private suspend fun createImage(file: File, weekMeals: List<DayMeals>, context: 
     }
 }
 
-private fun calculatePages(
-    weekMeals: List<DayMeals>,
-    density: Float,
-    pageHeight: Int,
-    margin: Int
-): List<List<Pair<DayMeals, Meal>>> {
-    val mealsList = mutableListOf<Pair<DayMeals, Meal>>()
-    weekMeals.forEach { dayMeals ->
-        dayMeals.meals.filter { !it.isVierge() }.forEach { meal ->
-            mealsList.add(dayMeals to meal)
-        }
-    }
+private fun shareFile(context: Context, file: File, format: String) {
+    try {
+        val uris = ArrayList<Uri>()
+        val baseName = file.nameWithoutExtension
 
-    val pages = mutableListOf<List<Pair<DayMeals, Meal>>>()
-    var currentPage = mutableListOf<Pair<DayMeals, Meal>>()
-    var currentHeight = margin + (110 * density).toInt() // Header + table header
-
-    mealsList.forEach { (dayMeals, meal) ->
-        val description = if (!meal.notes.isNullOrBlank()) {
-            "${meal.description}\nNotes: ${meal.notes}"
-        } else {
-            meal.description
+        val mainFile = File(file.parent, "$baseName.jpg")
+        if (mainFile.exists()) {
+            uris.add(FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", mainFile))
         }
 
-        val textHeight = calculateTextHeight(
-            text = description,
-            paint = Paint().apply {
-                textSize = 12f * density
-                typeface = Typeface.DEFAULT
-            },
-            maxWidth = (595 * density - 2 * margin) / 4f * 2 - (10 * density),
-            lineHeight = 20f * density
-        )
-
-        val mealHeight = maxOf(
-            (100 * density).toInt(), // Hauteur minimale
-            (textHeight + 30 * density).toInt() // Hauteur réelle
-        )
-
-        if (currentHeight + mealHeight > pageHeight - (50 * density).toInt()) {
-            pages.add(currentPage)
-            currentPage = mutableListOf(dayMeals to meal)
-            currentHeight = margin + (110 * density).toInt() + mealHeight
-        } else {
-            currentPage.add(dayMeals to meal)
-            currentHeight += mealHeight
+        if (format == "Image") {
+            var pageNum = 2
+            while (true) {
+                val pageFile = File(file.parent, "${baseName}_$pageNum.jpg")
+                if (!pageFile.exists()) break
+                uris.add(FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", pageFile))
+                pageNum++
+            }
         }
-    }
 
-    if (currentPage.isNotEmpty()) {
-        pages.add(currentPage)
-    }
+        val shareIntent = Intent().apply {
+            action = if (uris.size > 1) Intent.ACTION_SEND_MULTIPLE else Intent.ACTION_SEND
+            if (uris.size > 1) {
+                putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+            } else {
+                putExtra(Intent.EXTRA_STREAM, uris[0])
+            }
+            type = when (format) {
+                "PDF" -> "application/pdf"
+                else -> "image/jpeg"
+            }
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
 
-    return pages
+        context.startActivity(Intent.createChooser(shareIntent, "Partager via"))
+    } catch (e: Exception) {
+        Toast.makeText(context, "Erreur lors du partage: ${e.message}", Toast.LENGTH_LONG).show()
+    }
+}
+private fun calculateRowHeight(meal: Meal, density: Float, pageWidth: Int, margin: Int): Int {
+    val columnWidth = (pageWidth - 2 * margin) / 4f
+    val description = if (!meal.notes.isNullOrBlank()) "${meal.description}\nNotes: ${meal.notes}" else meal.description
+    val textHeight = calculateTextHeight(
+        text = description,
+        paint = Paint().apply { textSize = 12f * density },
+        maxWidth = columnWidth * 2 - (15 * density),
+        lineHeight = 20f * density
+    )
+    return maxOf((100 * density).toInt(), (textHeight + 20 * density).toInt())
 }
 
-private fun drawHeader(
-    canvas: Canvas,
-    pageIndex: Int,
-    totalPages: Int,
-    margin: Int,
-    yPos: Int,
-    density: Float
-) {
+private fun calculateTextHeight(text: String, paint: Paint, maxWidth: Float, lineHeight: Float): Float {
+    return text.split("\n").sumOf { line ->
+        if (paint.measureText(line) > maxWidth) {
+            var start = 0
+            var lines = 0
+            while (start < line.length) {
+                val count = paint.breakText(line, start, line.length, true, maxWidth, null)
+                lines++
+                start += count
+            }
+            lines
+        } else 1
+    } * lineHeight
+}
+
+private fun drawHeader(canvas: Canvas, pageIndex: Int, totalPages: Int, margin: Int, yPos: Int, density: Float) {
     val titlePaint = Paint().apply {
-        color = android.graphics.Color.BLACK
+        color = Color.BLACK
         textSize = 24f * density
         typeface = Typeface.DEFAULT_BOLD
-        isAntiAlias = true
     }
-
-    val textPaint = Paint().apply {
-        color = android.graphics.Color.BLACK
-        textSize = 12f * density
-        typeface = Typeface.DEFAULT
-        isAntiAlias = true
-    }
+    val textPaint = Paint(titlePaint).apply { textSize = 12f * density }
 
     canvas.drawText("Récapitulatif des repas", margin.toFloat(), yPos.toFloat(), titlePaint)
-    canvas.drawText(getCurrentWeekInfo(), margin.toFloat(), (yPos + 30 * density).toFloat(), textPaint)
-
-    // Pagination
-    canvas.drawText(
-        "Page ${pageIndex + 1}/$totalPages",
-        (595 * density - margin - 50 * density).toFloat(),
-        (yPos + 30 * density).toFloat(),
-        textPaint
-    )
+    canvas.drawText(getCurrentWeekInfo(), margin.toFloat(), (yPos + 30 * density), textPaint)
+    canvas.drawText("Page ${pageIndex + 1}/$totalPages", (595 * density - margin - 50 * density), (yPos + 30 * density), textPaint)
 }
 
-private fun drawTableHeader(
-    canvas: Canvas,
-    margin: Int,
-    yPos: Int,
-    pageWidth: Int,
-    density: Float
-): Int {
+private fun drawTableHeader(canvas: Canvas, margin: Int, yPos: Int, pageWidth: Int, density: Float): Int {
     val headerPaint = Paint().apply {
-        color = android.graphics.Color.BLACK
+        color = Color.BLACK
         textSize = 14f * density
         typeface = Typeface.DEFAULT_BOLD
-        isAntiAlias = true
         textAlign = Paint.Align.CENTER
     }
-
-    val linePaint = Paint().apply {
-        color = android.graphics.Color.BLACK
-        strokeWidth = 1f * density
-        isAntiAlias = true
-    }
-
-    val rowPaint = Paint().apply {
-        color = android.graphics.Color.LTGRAY
-        style = Paint.Style.FILL
-        isAntiAlias = true
-    }
-
+    val linePaint = Paint().apply { strokeWidth = 1f * density }
     val columnWidth = (pageWidth - 2 * margin) / 4f
     val headerHeight = (30 * density).toInt()
     val centerY = yPos + headerHeight / 2 - (headerPaint.descent() + headerPaint.ascent()) / 2
 
-    canvas.drawRect(
-        margin.toFloat(),
-        yPos.toFloat(),
-        (pageWidth - margin).toFloat(),
-        (yPos + headerHeight).toFloat(),
-        rowPaint
-    )
+    canvas.drawRect(margin.toFloat(), yPos.toFloat(), (pageWidth - margin).toFloat(), (yPos + headerHeight).toFloat(),
+        Paint().apply { color = Color.LTGRAY })
 
-    canvas.drawText("Jour", margin + columnWidth / 2, centerY, headerPaint)
-    canvas.drawText("Repas", margin + columnWidth + columnWidth / 2, centerY, headerPaint)
-    canvas.drawText("Description", margin + columnWidth * 2 + columnWidth / 2, centerY, headerPaint)
-    canvas.drawText("Photo", margin + columnWidth * 3 + columnWidth / 2, centerY, headerPaint)
+    listOf("Jour", "Repas", "Description", "Photo").forEachIndexed { index, text ->
+        canvas.drawText(text, margin + columnWidth * index + columnWidth / 2, centerY, headerPaint)
+    }
 
-    canvas.drawLine(
-        margin.toFloat(),
-        (yPos + headerHeight).toFloat(),
-        (pageWidth - margin).toFloat(),
-        (yPos + headerHeight).toFloat(),
-        linePaint
-    )
-
+    canvas.drawLine(margin.toFloat(), (yPos + headerHeight).toFloat(), (pageWidth - margin).toFloat(), (yPos + headerHeight).toFloat(), linePaint)
     return yPos + headerHeight + (10 * density).toInt()
 }
 
@@ -675,145 +621,62 @@ private fun drawMeals(
     context: Context
 ): Int {
     val textPaint = Paint().apply {
-        color = android.graphics.Color.BLACK
+        color = Color.BLACK
         textSize = 12f * density
-        typeface = Typeface.DEFAULT
-        isAntiAlias = true
         textAlign = Paint.Align.CENTER
     }
-
-    val linePaint = Paint().apply {
-        color = android.graphics.Color.BLACK
-        strokeWidth = 0.5f * density
-        isAntiAlias = true
-    }
-
-    val rowPaint = Paint().apply {
-        style = Paint.Style.FILL
-        isAntiAlias = true
-    }
-
+    val linePaint = Paint().apply { strokeWidth = 0.5f * density }
     val columnWidth = (pageWidth - 2 * margin) / 4f
-    val imageSize = (80 * density).toInt()
     var yPos = startY
 
     meals.forEachIndexed { index, (dayMeals, meal) ->
-        val description = if (!meal.notes.isNullOrBlank()) {
-            "${meal.description}\nNotes: ${meal.notes}"
-        } else {
-            meal.description
+        val rowHeight = calculateRowHeight(meal, density, pageWidth, margin)
+        val rowPaint = Paint().apply {
+            color = if (index % 2 == 0) Color.parseColor("#F8F8F8") else Color.WHITE
         }
 
-        val lineHeight = 20f * density
-        val maxTextWidth = columnWidth * 2 - (15 * density)
-        val textHeight = calculateTextHeight(description, textPaint, maxTextWidth, lineHeight)
-        val rowHeight = maxOf(
-            (100 * density).toInt(),
-            (textHeight + 20 * density).toInt()
-        )
-
-        rowPaint.color = if (index % 2 == 0) {
-            android.graphics.Color.parseColor("#F8F8F8")
-        } else {
-            android.graphics.Color.WHITE
-        }
-
-        canvas.drawRect(
-            margin.toFloat(),
-            yPos.toFloat(),
-            (pageWidth - margin).toFloat(),
-            (yPos + rowHeight).toFloat(),
-            rowPaint
-        )
-
+        canvas.drawRect(margin.toFloat(), yPos.toFloat(), (pageWidth - margin).toFloat(), (yPos + rowHeight).toFloat(), rowPaint)
         val centerY = yPos + rowHeight / 2 - (textPaint.descent() + textPaint.ascent()) / 2
 
         canvas.drawText(dayMeals.day, margin + columnWidth / 2, centerY, textPaint)
         canvas.drawText(meal.type.toFrenchString(), margin + columnWidth + columnWidth / 2, centerY, textPaint)
 
-        val descPaint = Paint(textPaint).apply {
-            textAlign = Paint.Align.LEFT
-        }
-
+        val descPaint = Paint(textPaint).apply { textAlign = Paint.Align.LEFT }
         drawMultilineText(
             canvas = canvas,
-            text = description,
+            text = if (!meal.notes.isNullOrBlank()) "${meal.description}\nNotes: ${meal.notes}" else meal.description,
             x = margin + columnWidth * 2 + (5 * density),
             y = yPos + (20 * density).toInt(),
             paint = descPaint,
-            maxWidth = maxTextWidth,
-            lineHeight = lineHeight,
-            maxLines = 5
+            maxWidth = columnWidth * 2 - (15 * density),
+            lineHeight = 20f * density
         )
 
         meal.photoUri?.let { uriString ->
             try {
-                val uri = Uri.parse(uriString)
-                context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                context.contentResolver.openInputStream(Uri.parse(uriString))?.use { inputStream ->
                     BitmapFactory.decodeStream(inputStream)?.let { originalBitmap ->
-                        try {
-                            val scaledBitmap = Bitmap.createScaledBitmap(
-                                originalBitmap,
-                                imageSize,
-                                imageSize,
-                                true
-                            )
-                            canvas.drawBitmap(
-                                scaledBitmap,
-                                margin + columnWidth * 3 + (columnWidth - imageSize) / 2,
-                                yPos + (rowHeight - imageSize) / 2f,
-                                null
-                            )
-                            scaledBitmap.recycle()
-                        } finally {
-                            originalBitmap.recycle()
-                        }
+                        val imageSize = (80 * density).toInt()
+                        val scaledBitmap = Bitmap.createScaledBitmap(originalBitmap, imageSize, imageSize, true)
+                        canvas.drawBitmap(scaledBitmap, margin + columnWidth * 3 + (columnWidth - imageSize) / 2,
+                            yPos + (rowHeight - imageSize) / 2f, null)
+                        scaledBitmap.recycle()
+                        originalBitmap.recycle()
                     }
                 }
             } catch (e: Exception) {
                 canvas.drawText("-", margin + columnWidth * 3, centerY, textPaint)
             }
-        } ?: run {
-            canvas.drawText("-", margin + columnWidth * 3, centerY, textPaint)
-        }
+        } ?: canvas.drawText("-", margin + columnWidth * 3, centerY, textPaint)
 
         yPos += rowHeight
-
-        canvas.drawLine(
-            margin.toFloat(),
-            yPos.toFloat(),
-            (pageWidth - margin).toFloat(),
-            yPos.toFloat(),
-            linePaint
-        )
-
+        canvas.drawLine(margin.toFloat(), yPos.toFloat(), (pageWidth - margin).toFloat(), yPos.toFloat(), linePaint)
         yPos += (2 * density).toInt()
     }
 
     return yPos
 }
 
-private fun calculateTextHeight(text: String, paint: Paint, maxWidth: Float, lineHeight: Float): Float {
-    var height = 0f
-    val lines = text.split("\n")
-
-    lines.forEach { line ->
-        if (paint.measureText(line) > maxWidth) {
-            var start = 0
-            while (start < line.length) {
-                val count = paint.breakText(line, start, line.length, true, maxWidth, null)
-                height += lineHeight
-                start += count
-            }
-        } else {
-            height += lineHeight
-        }
-    }
-
-    return height
-}
-
-// Fonction existante améliorée pour le texte multiligne
 private fun drawMultilineText(
     canvas: Canvas,
     text: String,
@@ -825,10 +688,9 @@ private fun drawMultilineText(
     maxLines: Int = Int.MAX_VALUE
 ) {
     var currentY = y.toFloat()
-    val lines = text.split("\n")
     var linesDrawn = 0
 
-    lines.forEach { line ->
+    text.split("\n").forEach { line ->
         if (linesDrawn >= maxLines) return@forEach
 
         if (paint.measureText(line) > maxWidth) {
@@ -840,108 +702,164 @@ private fun drawMultilineText(
                 start += count
                 linesDrawn++
             }
-        } else {
-            if (linesDrawn < maxLines) {
-                canvas.drawText(line, x, currentY, paint)
-                currentY += lineHeight
-                linesDrawn++
-            }
+        } else if (linesDrawn < maxLines) {
+            canvas.drawText(line, x, currentY, paint)
+            currentY += lineHeight
+            linesDrawn++
         }
-    }
-
-    if (linesDrawn >= maxLines && text.lines().sumOf { it.length } > 0) {
-        canvas.drawText("...", x, currentY, paint)
-    }
-}
-
-
-private fun shareFile(context: Context, file: File, format: String) {
-    try {
-        val uri = FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            file
-        )
-
-        val shareIntent = Intent().apply {
-            action = Intent.ACTION_SEND
-            putExtra(Intent.EXTRA_STREAM, uri)
-            type = when (format) {
-                "PDF" -> "application/pdf"
-                else -> "image/*"
-            }
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-
-        context.startActivity(Intent.createChooser(shareIntent, "Partager via"))
-    } catch (e: Exception) {
-        Toast.makeText(context, "Erreur lors du partage: ${e.message}", Toast.LENGTH_LONG).show()
     }
 }
 
 private fun sendToDietician(context: Context, file: File, format: String, email: String) {
-    if (email.isBlank()) {
-        Toast.makeText(context, "Veuillez entrer un email valide", Toast.LENGTH_SHORT).show()
-        return
-    }
-
-    val uri = FileProvider.getUriForFile(
-        context,
-        "${context.packageName}.fileprovider",
-        file
-    )
-
-    val emailIntent = Intent(Intent.ACTION_SEND).apply {
-        type = "message/rfc822"
-        putExtra(Intent.EXTRA_EMAIL, arrayOf(email))
-        putExtra(Intent.EXTRA_SUBJECT, "Mon carnet alimentaire")
-        putExtra(Intent.EXTRA_TEXT, "Voici mon carnet alimentaire comme convenu. Cordialement.")
-        putExtra(Intent.EXTRA_STREAM, uri)
-        type = when (format) {
-            "PDF" -> "application/pdf"
-            else -> "image/png"
-        }
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-
     try {
+        val uris = ArrayList<Uri>()
+        val baseName = file.nameWithoutExtension
+
+        uris.add(FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file))
+
+        if (format == "Image") {
+            var pageNum = 2
+            while (true) {
+                val pageFile = File(file.parent, "${baseName}_$pageNum.jpg")
+                if (!pageFile.exists()) break
+                uris.add(FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", pageFile))
+                pageNum++
+            }
+        }
+
+        val emailIntent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "message/rfc822"
+            putExtra(Intent.EXTRA_EMAIL, arrayOf(email))
+            putExtra(Intent.EXTRA_SUBJECT, "Mon carnet alimentaire")
+            putExtra(Intent.EXTRA_TEXT, "Voici mon carnet alimentaire comme convenu. Cordialement.")
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
         context.startActivity(Intent.createChooser(emailIntent, "Envoyer à la diététicienne"))
     } catch (e: Exception) {
         Toast.makeText(context, "Aucune application email trouvée", Toast.LENGTH_SHORT).show()
     }
 }
 
-private fun saveFile(context: Context, file: File, format: String): String? {
-    return try {
+private suspend fun saveFile(
+    context: Context,
+    weekMeals: List<DayMeals>,
+    format: String,
+    onProgress: (Float) -> Unit = {}
+): String? = withContext(Dispatchers.IO) {
+    try {
+        // Créer le fichier temporaire
+        val tempFile = createExportFile(context, weekMeals, format, onProgress) ?: return@withContext null
+        val baseName = tempFile.nameWithoutExtension
+        val mimeType = when (format) {
+            "PDF" -> "application/pdf"
+            else -> "image/jpeg"
+        }
+
+        // Pour Android 10+ (Q)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            val values = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, file.name)
-                put(MediaStore.MediaColumns.MIME_TYPE, when (format) {
-                    "PDF" -> "application/pdf"
-                    else -> "image/png"
-                })
-                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOCUMENTS + "/FoodDiary")
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, "$baseName.${if (format == "PDF") "pdf" else "jpg"}")
+                put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                put(MediaStore.MediaColumns.RELATIVE_PATH,
+                    if (format == "PDF")
+                        Environment.DIRECTORY_DOCUMENTS + "/FoodDiary"
+                    else
+                        Environment.DIRECTORY_PICTURES + "/FoodDiary")
             }
 
             val resolver = context.contentResolver
-            val uri = resolver.insert(MediaStore.Files.getContentUri("external"), values)
+            val uri = resolver.insert(
+                if (format == "PDF")
+                    MediaStore.Files.getContentUri("external")
+                else
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                contentValues
+            ) ?: return@withContext null
 
-            uri?.let {
-                resolver.openOutputStream(it)?.use { outputStream ->
-                    file.inputStream().use { inputStream ->
-                        inputStream.copyTo(outputStream)
-                    }
+            // Copier le fichier temporaire
+            resolver.openOutputStream(uri)?.use { output ->
+                tempFile.inputStream().use { input ->
+                    input.copyTo(output)
                 }
-                "Fichier enregistré dans Documents/FoodDiary/${file.name}"
-            } ?: run {
-                null
             }
-        } else {
-            val destinationDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-            val foodDiaryDir = File(destinationDir, "FoodDiary").apply { mkdirs() }
-            val destinationFile = File(foodDiaryDir, file.name)
-            file.copyTo(destinationFile, overwrite = true)
-            "Fichier enregistré dans Documents/FoodDiary/${file.name}"
+
+            // Pour les images multi-pages
+            if (format == "Image") {
+                var pageNum = 2
+                while (true) {
+                    val pageFile = File(tempFile.parent, "${baseName}_$pageNum.jpg")
+                    if (!pageFile.exists()) break
+
+                    val pageContentValues = ContentValues().apply {
+                        put(MediaStore.MediaColumns.DISPLAY_NAME, "${baseName}_$pageNum.jpg")
+                        put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                        put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/FoodDiary")
+                    }
+
+                    val pageUri = resolver.insert(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        pageContentValues
+                    ) ?: continue
+
+                    resolver.openOutputStream(pageUri)?.use { output ->
+                        pageFile.inputStream().use { input ->
+                            input.copyTo(output)
+                        }
+                    }
+                    pageNum++
+                }
+            }
+
+            return@withContext if (format == "PDF") {
+                "PDF enregistré dans Documents/FoodDiary"
+            } else {
+                "Image(s) enregistrée(s) dans Photos/FoodDiary"
+            }
+        }
+        // Pour Android <10
+        else {
+            val targetDir = File(
+                Environment.getExternalStoragePublicDirectory(
+                    if (format == "PDF")
+                        Environment.DIRECTORY_DOCUMENTS
+                    else
+                        Environment.DIRECTORY_PICTURES
+                ),
+                "FoodDiary"
+            ).apply { mkdirs() }
+
+            // Copier le fichier principal
+            val destFile = File(targetDir, tempFile.name)
+            tempFile.copyTo(destFile, true)
+
+            // Pour les images multi-pages
+            if (format == "Image") {
+                var pageNum = 2
+                while (true) {
+                    val pageFile = File(tempFile.parent, "${baseName}_$pageNum.jpg")
+                    if (!pageFile.exists()) break
+
+                    File(targetDir, "${baseName}_$pageNum.jpg").let { destPageFile ->
+                        pageFile.copyTo(destPageFile, true)
+                    }
+                    pageNum++
+                }
+            }
+
+            // Scanner le fichier pour qu'il apparaisse dans la galerie (pour les images)
+            if (format == "Image") {
+                val mediaScanIntent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
+                mediaScanIntent.data = Uri.fromFile(targetDir)
+                context.sendBroadcast(mediaScanIntent)
+            }
+
+            return@withContext if (format == "PDF") {
+                "PDF enregistré dans Documents/FoodDiary"
+            } else {
+                "Image(s) enregistrée(s) dans Photos/FoodDiary"
+            }
         }
     } catch (e: Exception) {
         e.printStackTrace()
