@@ -6,6 +6,9 @@ import android.content.Intent
 import android.graphics.*
 import android.net.Uri
 import android.os.Environment
+import kotlin.math.min
+import com.fooddiary.R
+import androidx.core.content.ContextCompat
 import android.provider.MediaStore
 import android.widget.Toast
 import androidx.compose.foundation.Image
@@ -254,7 +257,34 @@ private fun generatePreviewBitmap(
     context: Context,
     format: String
 ): Bitmap? {
-    if (weekMeals.isEmpty() || weekMeals.all { it.meals.isEmpty() }) return null
+    val nonEmptyMeals = weekMeals.flatMap { dayMeals ->
+        dayMeals.meals.filterNot { it.isVierge() }.map { dayMeals.day to it }
+    }
+
+    if (nonEmptyMeals.isEmpty()) {
+        val density = context.resources.displayMetrics.density
+        val bitmap = Bitmap.createBitmap(
+            (300 * density).toInt(),
+            (200 * density).toInt(),
+            Bitmap.Config.ARGB_8888
+        )
+        Canvas(bitmap).apply {
+            drawColor(Color.WHITE)
+            Paint().apply {
+                color = Color.BLACK
+                textSize = 14f * density
+                textAlign = Paint.Align.CENTER
+            }.let { paint ->
+                drawText(
+                    "Aucun repas enregistré",
+                    bitmap.width / 2f,
+                    bitmap.height / 2f,
+                    paint
+                )
+            }
+        }
+        return bitmap
+    }
 
     val density = context.resources.displayMetrics.density
     val width = (300 * density).toInt()
@@ -266,42 +296,149 @@ private fun generatePreviewBitmap(
         isAntiAlias = true
     }
 
-    var yPos = 20f * density
-
+    var yPos = 15f * density
     paint.textSize = 16f * density
     paint.typeface = Typeface.DEFAULT_BOLD
-    canvas.drawText("Prévisualisation", 20f * density, yPos, paint)
+    canvas.drawText("Prévisualisation", 15f * density, yPos, paint)
     yPos += 25f * density
 
     paint.textSize = 12f * density
     paint.typeface = Typeface.DEFAULT
-    canvas.drawText(getCurrentWeekInfo(), 20f * density, yPos, paint)
-    yPos += 30f * density
-
-    val columnWidth = (width - 40 * density) / 3f
-    paint.textSize = 12f * density
-    paint.typeface = Typeface.DEFAULT_BOLD
-    canvas.drawText("Jour", 20f * density, yPos, paint)
-    canvas.drawText("Repas", 20f * density + columnWidth, yPos, paint)
-    canvas.drawText("Desc.", 20f * density + columnWidth * 2, yPos, paint)
-    yPos += 20f * density
+    canvas.drawText(getCurrentWeekInfo(), 15f * density, yPos, paint)
+    yPos += 25f * density
 
     paint.strokeWidth = 1f * density
-    canvas.drawLine(20f * density, yPos, width - 20f * density, yPos, paint)
-    yPos += 10f * density
+    canvas.drawLine(15f * density, yPos, width - 15f * density, yPos, paint)
+    yPos += 15f * density
 
-    paint.textSize = 10f * density
-    paint.typeface = Typeface.DEFAULT
-    weekMeals.take(2).forEach { dayMeals ->
-        dayMeals.meals.take(2).forEach { meal ->
-            if (!meal.isVierge()) {
-                canvas.drawText(dayMeals.day, 20f * density, yPos, paint)
-                canvas.drawText(meal.type.toString(), 20f * density + columnWidth, yPos, paint)
-                canvas.drawText(meal.description.take(15) + if (meal.description.length > 15) "..." else "",
-                    20f * density + columnWidth * 2, yPos, paint)
-                yPos += 20f * density
+    val columnConfig = listOf(
+        "Jour" to 0.15f,
+        "Repas" to 0.25f,
+        "Description" to 0.45f,
+        "Photo" to 0.15f
+    )
+    val totalWidth = width - 30f * density
+    val headerHeight = 25f * density
+    val iconSize = (20 * density).toInt()
+    val photoIcon = ContextCompat.getDrawable(context, R.drawable.ic_photo_frame)?.apply {
+        setBounds(0, 0, iconSize, iconSize)
+    }
+
+    canvas.drawRect(
+        15f * density, yPos,
+        width - 15f * density, yPos + headerHeight,
+        Paint().apply { color = Color.LTGRAY }
+    )
+
+    var currentX = 15f * density
+    columnConfig.forEach { (title, widthRatio) ->
+        val colWidth = totalWidth * widthRatio
+        paint.textSize = 10f * density
+        paint.typeface = Typeface.DEFAULT_BOLD
+        paint.textAlign = Paint.Align.LEFT
+        canvas.drawText(
+            title,
+            currentX + 5f * density,
+            yPos + headerHeight / 2 + (paint.textSize / 3),
+            paint
+        )
+        currentX += colWidth
+    }
+    yPos += headerHeight + 5f * density
+
+    val maxRows = min(8, nonEmptyMeals.size)
+    val lineHeight = 25f * density
+
+    for (i in 0 until maxRows) {
+        val (day, meal) = nonEmptyMeals[i]
+
+        canvas.drawRect(
+            15f * density, yPos,
+            width - 15f * density, yPos + lineHeight,
+            Paint().apply {
+                color = if (i % 2 == 0) Color.WHITE else Color.parseColor("#F5F5F5")
             }
+        )
+
+        currentX = 15f * density
+        var colWidth = totalWidth * columnConfig[0].second
+        paint.textAlign = Paint.Align.LEFT
+        canvas.drawText(
+            day,
+            currentX + 5f * density,
+            yPos + lineHeight / 2 + (paint.textSize / 3),
+            paint
+        )
+        currentX += colWidth
+
+        colWidth = totalWidth * columnConfig[1].second
+        canvas.drawText(
+            meal.type.toFrenchString(),
+            currentX + 5f * density,
+            yPos + lineHeight / 2 + (paint.textSize / 3),
+            paint
+        )
+        currentX += colWidth
+
+        colWidth = totalWidth * columnConfig[2].second
+        val desc = if (meal.description.length > 20) {
+            "${meal.description.take(17)}..."
+        } else {
+            meal.description
         }
+        canvas.drawText(
+            desc,
+            currentX + 5f * density,
+            yPos + lineHeight / 2 + (paint.textSize / 3),
+            paint
+        )
+        currentX += colWidth
+
+        colWidth = totalWidth * columnConfig[3].second
+        if (meal.photoUri != null) {
+            photoIcon?.let { icon ->
+                canvas.save()
+                canvas.translate(
+                    currentX + (colWidth - iconSize) / 2,
+                    yPos + (lineHeight - iconSize) / 2
+                )
+                icon.draw(canvas)
+                canvas.restore()
+            }
+        } else {
+            paint.textAlign = Paint.Align.CENTER
+            canvas.drawText(
+                "-",
+                currentX + colWidth / 2,
+                yPos + lineHeight / 2 + (paint.textSize / 3),
+                paint
+            )
+            paint.textAlign = Paint.Align.LEFT
+        }
+
+        yPos += lineHeight
+
+        if (i < maxRows - 1) {
+            canvas.drawLine(
+                15f * density, yPos,
+                width - 15f * density, yPos,
+                Paint().apply {
+                    color = Color.LTGRAY
+                    strokeWidth = 0.5f * density
+                }
+            )
+            yPos += 2f * density
+        }
+    }
+
+    if (nonEmptyMeals.size > maxRows) {
+        paint.textAlign = Paint.Align.CENTER
+        canvas.drawText(
+            "... +${nonEmptyMeals.size - maxRows} repas",
+            width / 2f,
+            height - 20f * density,
+            paint
+        )
     }
 
     return bitmap
@@ -514,11 +651,20 @@ private fun shareFile(context: Context, file: File, format: String) {
         val uris = ArrayList<Uri>()
         val baseName = file.nameWithoutExtension
 
-        val mainFile = File(file.parent, "$baseName.jpg")
-        if (mainFile.exists()) {
-            uris.add(FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", mainFile))
+        // Vérifier d'abord le fichier principal en fonction du format
+        val mainFile = when (format) {
+            "PDF" -> File(file.parent, "$baseName.pdf")
+            else -> File(file.parent, "$baseName.jpg")
         }
 
+        if (mainFile.exists()) {
+            uris.add(FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", mainFile))
+        } else {
+            Toast.makeText(context, "Fichier principal introuvable", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Pour les images multi-pages
         if (format == "Image") {
             var pageNum = 2
             while (true) {
@@ -531,21 +677,24 @@ private fun shareFile(context: Context, file: File, format: String) {
 
         val shareIntent = Intent().apply {
             action = if (uris.size > 1) Intent.ACTION_SEND_MULTIPLE else Intent.ACTION_SEND
+            type = when (format) {
+                "PDF" -> "application/pdf"
+                else -> "image/jpeg"
+            }
+
             if (uris.size > 1) {
                 putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
             } else {
                 putExtra(Intent.EXTRA_STREAM, uris[0])
             }
-            type = when (format) {
-                "PDF" -> "application/pdf"
-                else -> "image/jpeg"
-            }
+
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
         context.startActivity(Intent.createChooser(shareIntent, "Partager via"))
     } catch (e: Exception) {
         Toast.makeText(context, "Erreur lors du partage: ${e.message}", Toast.LENGTH_LONG).show()
+        e.printStackTrace()
     }
 }
 private fun calculateRowHeight(meal: Meal, density: Float, pageWidth: Int, margin: Int): Int {
@@ -596,15 +745,20 @@ private fun drawTableHeader(canvas: Canvas, margin: Int, yPos: Int, pageWidth: I
         textAlign = Paint.Align.CENTER
     }
     val linePaint = Paint().apply { strokeWidth = 1f * density }
-    val columnWidth = (pageWidth - 2 * margin) / 4f
+    // Modifier ici les largeurs des colonnes (Jour: 10%, Repas: 15%, Description: 55%, Photo: 20%)
+    val columnWidths = listOf(0.1f, 0.15f, 0.55f, 0.2f)
+    val totalWidth = pageWidth - 2 * margin
     val headerHeight = (30 * density).toInt()
     val centerY = yPos + headerHeight / 2 - (headerPaint.descent() + headerPaint.ascent()) / 2
 
     canvas.drawRect(margin.toFloat(), yPos.toFloat(), (pageWidth - margin).toFloat(), (yPos + headerHeight).toFloat(),
         Paint().apply { color = Color.LTGRAY })
 
+    var currentX = margin.toFloat()
     listOf("Jour", "Repas", "Description", "Photo").forEachIndexed { index, text ->
-        canvas.drawText(text, margin + columnWidth * index + columnWidth / 2, centerY, headerPaint)
+        val colWidth = totalWidth * columnWidths[index]
+        canvas.drawText(text, currentX + colWidth / 2, centerY, headerPaint)
+        currentX += colWidth
     }
 
     canvas.drawLine(margin.toFloat(), (yPos + headerHeight).toFloat(), (pageWidth - margin).toFloat(), (yPos + headerHeight).toFloat(), linePaint)
@@ -626,7 +780,9 @@ private fun drawMeals(
         textAlign = Paint.Align.CENTER
     }
     val linePaint = Paint().apply { strokeWidth = 0.5f * density }
-    val columnWidth = (pageWidth - 2 * margin) / 4f
+    // Mêmes proportions que pour l'en-tête
+    val columnWidths = listOf(0.1f, 0.15f, 0.55f, 0.2f)
+    val totalWidth = pageWidth - 2 * margin
     var yPos = startY
 
     meals.forEachIndexed { index, (dayMeals, meal) ->
@@ -638,36 +794,48 @@ private fun drawMeals(
         canvas.drawRect(margin.toFloat(), yPos.toFloat(), (pageWidth - margin).toFloat(), (yPos + rowHeight).toFloat(), rowPaint)
         val centerY = yPos + rowHeight / 2 - (textPaint.descent() + textPaint.ascent()) / 2
 
-        canvas.drawText(dayMeals.day, margin + columnWidth / 2, centerY, textPaint)
-        canvas.drawText(meal.type.toFrenchString(), margin + columnWidth + columnWidth / 2, centerY, textPaint)
+        // Dessiner les cellules avec les nouvelles largeurs
+        var currentX = margin.toFloat()
 
+        // Cellule Jour
+        canvas.drawText(dayMeals.day, currentX + (totalWidth * columnWidths[0]) / 2, centerY, textPaint)
+        currentX += totalWidth * columnWidths[0]
+
+        // Cellule Repas
+        canvas.drawText(meal.type.toFrenchString(), currentX + (totalWidth * columnWidths[1]) / 2, centerY, textPaint)
+        currentX += totalWidth * columnWidths[1]
+
+        // Cellule Description
         val descPaint = Paint(textPaint).apply { textAlign = Paint.Align.LEFT }
         drawMultilineText(
             canvas = canvas,
             text = if (!meal.notes.isNullOrBlank()) "${meal.description}\nNotes: ${meal.notes}" else meal.description,
-            x = margin + columnWidth * 2 + (5 * density),
+            x = currentX + (5 * density),
             y = yPos + (20 * density).toInt(),
             paint = descPaint,
-            maxWidth = columnWidth * 2 - (15 * density),
+            maxWidth = totalWidth * columnWidths[2] - (10 * density),
             lineHeight = 20f * density
         )
+        currentX += totalWidth * columnWidths[2]
 
+        // Cellule Photo
         meal.photoUri?.let { uriString ->
             try {
                 context.contentResolver.openInputStream(Uri.parse(uriString))?.use { inputStream ->
                     BitmapFactory.decodeStream(inputStream)?.let { originalBitmap ->
                         val imageSize = (80 * density).toInt()
                         val scaledBitmap = Bitmap.createScaledBitmap(originalBitmap, imageSize, imageSize, true)
-                        canvas.drawBitmap(scaledBitmap, margin + columnWidth * 3 + (columnWidth - imageSize) / 2,
+                        canvas.drawBitmap(scaledBitmap,
+                            currentX + (totalWidth * columnWidths[3] - imageSize) / 2,
                             yPos + (rowHeight - imageSize) / 2f, null)
                         scaledBitmap.recycle()
                         originalBitmap.recycle()
                     }
                 }
             } catch (e: Exception) {
-                canvas.drawText("-", margin + columnWidth * 3, centerY, textPaint)
+                canvas.drawText("-", currentX + (totalWidth * columnWidths[3]) / 2, centerY, textPaint)
             }
-        } ?: canvas.drawText("-", margin + columnWidth * 3, centerY, textPaint)
+        } ?: canvas.drawText("-", currentX + (totalWidth * columnWidths[3]) / 2, centerY, textPaint)
 
         yPos += rowHeight
         canvas.drawLine(margin.toFloat(), yPos.toFloat(), (pageWidth - margin).toFloat(), yPos.toFloat(), linePaint)
