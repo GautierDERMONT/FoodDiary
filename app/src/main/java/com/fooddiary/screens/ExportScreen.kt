@@ -47,6 +47,10 @@ import java.util.*
 import kotlinx.coroutines.delay
 import com.fooddiary.utils.getCurrentWeekInfo
 import com.fooddiary.model.Meal
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Save
+
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,11 +89,14 @@ fun ExportScreen(navController: NavController, viewModel: MealViewModel) {
         Box(Modifier.fillMaxSize().padding(padding)) {
             Column(Modifier.padding(16.dp)) {
                 PreviewCard(previewBitmap, isLoading)
+                Spacer(modifier = Modifier.height(16.dp)) // Ajout d'un espace ici
                 FormatSelector(exportFormat) { exportFormat = it }
+                Spacer(modifier = Modifier.height(16.dp)) // Ajout d'un espace ici
                 DieticianOptions(sendToDietician, dieticianEmail,
                     { sendToDietician = it },
                     { viewModel.updateDieticianEmail(it) }
                 )
+                Spacer(modifier = Modifier.height(24.dp)) // Augmentation de l'espace ici
                 ActionButtons(
                     isLoading,
                     progress,
@@ -194,7 +201,7 @@ private fun DieticianOptions(
 }
 
 @Composable
-private fun ActionButtons(
+fun ActionButtons(
     isLoading: Boolean,
     progress: Float,
     onShare: () -> Unit,
@@ -203,12 +210,15 @@ private fun ActionButtons(
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
     ) {
         Button(
             onClick = onShare,
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+            enabled = !isLoading,
+            colors = ButtonDefaults.buttonColors()
         ) {
             if (isLoading) {
                 LinearProgressIndicator(
@@ -216,6 +226,11 @@ private fun ActionButtons(
                     modifier = Modifier.fillMaxWidth()
                 )
             } else {
+                Icon(
+                    imageVector = Icons.Default.Share,
+                    contentDescription = "Partager",
+                    modifier = Modifier.padding(end = 8.dp)
+                )
                 Text("Partager")
             }
         }
@@ -223,7 +238,8 @@ private fun ActionButtons(
         OutlinedButton(
             onClick = onSave,
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+            enabled = !isLoading,
+            colors = ButtonDefaults.outlinedButtonColors()
         ) {
             if (isLoading) {
                 LinearProgressIndicator(
@@ -231,6 +247,11 @@ private fun ActionButtons(
                     modifier = Modifier.fillMaxWidth()
                 )
             } else {
+                Icon(
+                    imageVector = Icons.Default.Save,
+                    contentDescription = "Enregistrer",
+                    modifier = Modifier.padding(end = 8.dp)
+                )
                 Text("Enregistrer")
             }
         }
@@ -562,8 +583,28 @@ private fun createPhotoCell(meal: Meal, context: Context): com.itextpdf.layout.e
 
     meal.photoUri?.let { uriString ->
         try {
-            val imageData = ImageDataFactory.create(uriString.removePrefix("file://"))
-            cell.add(com.itextpdf.layout.element.Image(imageData).setWidth(100f).setHeight(100f))
+            // Ajoutez cette partie pour redimensionner l'image avant l'ajout au PDF
+            val originalBitmap = BitmapFactory.decodeFile(uriString.removePrefix("file://"))
+            val scaledBitmap = Bitmap.createScaledBitmap(originalBitmap,
+                originalBitmap.width / 2,  // Réduire la largeur de moitié
+                originalBitmap.height / 2, // Réduire la hauteur de moitié
+                true)
+
+            // Sauvegarder l'image redimensionnée temporairement
+            val tempFile = File.createTempFile("temp_img", ".jpg", context.cacheDir)
+            FileOutputStream(tempFile).use { out ->
+                scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 70, out) // 70% de qualité
+            }
+
+            val imageData = ImageDataFactory.create(tempFile.absolutePath)
+            cell.add(com.itextpdf.layout.element.Image(imageData)
+                .setWidth(80f)  // Réduire encore la taille d'affichage
+                .setHeight(80f))
+
+            // Nettoyer
+            originalBitmap.recycle()
+            scaledBitmap.recycle()
+            tempFile.delete()
         } catch (e: Exception) {
             cell.add(Paragraph("(image)"))
         }
@@ -595,6 +636,7 @@ private suspend fun createImage(
         val totalMeals = allMeals.size
         var processed = 0
 
+        // Calcul des pages avec mise à jour de la progression
         allMeals.forEach { (dayMeals, meal) ->
             val rowHeight = calculateRowHeight(meal, density, pageWidth, margin)
 
@@ -608,11 +650,12 @@ private suspend fun createImage(
             }
 
             processed++
-            onProgress(processed.toFloat() / totalMeals)
+            onProgress(processed.toFloat() / totalMeals * 0.5f) // Première moitié pour le calcul des pages
         }
 
         if (currentPage.isNotEmpty()) pages.add(currentPage)
 
+        // Génération des images avec mise à jour de la progression
         pages.forEachIndexed { index, meals ->
             val bitmap = Bitmap.createBitmap(pageWidth, pageHeight, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap).apply { drawColor(Color.WHITE) }
@@ -636,6 +679,9 @@ private suspend fun createImage(
                 }
             }
             bitmap.recycle()
+
+            // Mise à jour de la progression pour la génération des images
+            onProgress(0.5f + (index + 1).toFloat() / pages.size.toFloat() * 0.5f)
         }
 
         true
