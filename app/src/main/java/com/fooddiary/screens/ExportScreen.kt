@@ -67,6 +67,10 @@ fun ExportScreen(navController: NavController, viewModel: MealViewModel) {
     var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf(0f) }
+    var isSharing by remember { mutableStateOf(false) }
+    var isSaving by remember { mutableStateOf(false) }
+    var shareProgress by remember { mutableStateOf(0f) }
+    var saveProgress by remember { mutableStateOf(0f) }
 
     LaunchedEffect(weekMeals, exportFormat) {
         isLoading = true
@@ -98,27 +102,29 @@ fun ExportScreen(navController: NavController, viewModel: MealViewModel) {
                 )
                 Spacer(modifier = Modifier.height(24.dp)) // Augmentation de l'espace ici
                 ActionButtons(
-                    isLoading,
-                    progress,
+                    isSharing = isSharing,
+                    shareProgress = shareProgress,
+                    isSaving = isSaving,
+                    saveProgress = saveProgress,
                     onShare = {
                         scope.launch {
-                            isLoading = true
-                            progress = 0f
+                            isSharing = true
+                            shareProgress = 0f
                             createAndShare(context, weekMeals, exportFormat, sendToDietician, dieticianEmail) { p ->
-                                progress = p
+                                shareProgress = p
                             }
-                            isLoading = false
+                            isSharing = false
                         }
                     },
                     onSave = {
                         scope.launch {
-                            isLoading = true
-                            progress = 0f
+                            isSaving = true
+                            saveProgress = 0f
                             saveSuccessMessage = saveFile(context, weekMeals, exportFormat) { p ->
-                                progress = p
+                                saveProgress = p
                             } ?: "Erreur lors de l'enregistrement"
                             showSaveSuccess = true
-                            isLoading = false
+                            isSaving = false
                         }
                     }
                 )
@@ -202,8 +208,10 @@ private fun DieticianOptions(
 
 @Composable
 fun ActionButtons(
-    isLoading: Boolean,
-    progress: Float,
+    isSharing: Boolean,
+    shareProgress: Float,
+    isSaving: Boolean,
+    saveProgress: Float,
     onShare: () -> Unit,
     onSave: () -> Unit
 ) {
@@ -217,12 +225,12 @@ fun ActionButtons(
         Button(
             onClick = onShare,
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading,
+            enabled = !isSharing && !isSaving, // Désactivé si sauvegarde en cours
             colors = ButtonDefaults.buttonColors()
         ) {
-            if (isLoading) {
+            if (isSharing) {
                 LinearProgressIndicator(
-                    progress = progress,
+                    progress = shareProgress,
                     modifier = Modifier.fillMaxWidth()
                 )
             } else {
@@ -238,12 +246,12 @@ fun ActionButtons(
         OutlinedButton(
             onClick = onSave,
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading,
+            enabled = !isSaving && !isSharing, // Désactivé si partage en cours
             colors = ButtonDefaults.outlinedButtonColors()
         ) {
-            if (isLoading) {
+            if (isSaving) {
                 LinearProgressIndicator(
-                    progress = progress,
+                    progress = saveProgress,
                     modifier = Modifier.fillMaxWidth()
                 )
             } else {
