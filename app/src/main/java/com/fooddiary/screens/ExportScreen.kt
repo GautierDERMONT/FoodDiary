@@ -554,7 +554,6 @@ private fun createDescriptionCell(meal: Meal): com.itextpdf.layout.element.Cell 
     }
     return com.itextpdf.layout.element.Cell()
         .add(Paragraph(description).setFixedLeading(14f))
-        .setVerticalAlignment(com.itextpdf.layout.properties.VerticalAlignment.MIDDLE)
 }
 
 private fun createPhotoCell(meal: Meal, context: Context): com.itextpdf.layout.element.Cell {
