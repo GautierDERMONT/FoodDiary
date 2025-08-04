@@ -29,8 +29,18 @@ interface MealDao {
     @Query("DELETE FROM meals")
     suspend fun deleteAllMeals()
 
+    // Dans MealDao.kt
+    @Query("DELETE FROM meals WHERE weekNumber = :weekNumber")
+    suspend fun deleteMealsByWeekNumber(weekNumber: Int)
+
     @Query("SELECT * FROM meals")
     fun getAllMeals(): Flow<List<MealEntity>>
+
+    @Query("SELECT * FROM meals WHERE day = :day AND weekNumber = :weekNumber ORDER BY mealIndex")
+    fun getMealsByDayAndWeek(day: String, weekNumber: Int): Flow<List<MealEntity>>
+
+    @Query("DELETE FROM meals WHERE day = :day AND weekNumber = :weekNumber AND mealIndex = :mealIndex")
+    suspend fun deleteMealAt(day: String, weekNumber: Int, mealIndex: Int)
 
     @Update
     suspend fun update(meal: MealEntity)

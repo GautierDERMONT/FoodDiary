@@ -54,10 +54,24 @@ import androidx.compose.material.icons.filled.Save
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ExportScreen(navController: NavController, viewModel: MealViewModel) {
+fun ExportScreen(navController: NavController, viewModel: MealViewModel, weekOffset: Int = 0) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val weekMeals by viewModel.weekMeals.collectAsState()
+    val weekOffset = remember {
+        navController.currentBackStackEntry?.arguments?.getString("weekOffset")?.toIntOrNull() ?: 0
+    }
+
+    val displayedWeek by remember(weekOffset) {
+        derivedStateOf {
+            Calendar.getInstance().apply {
+                add(Calendar.WEEK_OF_YEAR, weekOffset)
+                firstDayOfWeek = Calendar.MONDAY
+            }
+        }
+    }
+
+
     val dieticianEmail by viewModel.dieticianEmail.collectAsState()
 
     var exportFormat by remember { mutableStateOf("PDF") }
@@ -72,11 +86,17 @@ fun ExportScreen(navController: NavController, viewModel: MealViewModel) {
     var shareProgress by remember { mutableStateOf(0f) }
     var saveProgress by remember { mutableStateOf(0f) }
 
-    LaunchedEffect(weekMeals, exportFormat) {
+    LaunchedEffect(weekMeals, exportFormat, displayedWeek) {
         isLoading = true
-        previewBitmap = generatePreviewBitmap(weekMeals, context, exportFormat)
+        previewBitmap = generatePreviewBitmap(
+            weekMeals,
+            context,
+            exportFormat,
+            displayedWeek // Utiliser displayedWeek au lieu de Calendar.getInstance()
+        )
         isLoading = false
     }
+
 
     Scaffold(
         topBar = {
@@ -110,9 +130,10 @@ fun ExportScreen(navController: NavController, viewModel: MealViewModel) {
                         scope.launch {
                             isSharing = true
                             shareProgress = 0f
-                            createAndShare(context, weekMeals, exportFormat, sendToDietician, dieticianEmail) { p ->
-                                shareProgress = p
-                            }
+                            createAndShare(
+                                context, weekMeals, exportFormat,
+                                sendToDietician, dieticianEmail, displayedWeek
+                            ) { p -> shareProgress = p }
                             isSharing = false
                         }
                     },
@@ -120,9 +141,9 @@ fun ExportScreen(navController: NavController, viewModel: MealViewModel) {
                         scope.launch {
                             isSaving = true
                             saveProgress = 0f
-                            saveSuccessMessage = saveFile(context, weekMeals, exportFormat) { p ->
-                                saveProgress = p
-                            } ?: "Erreur lors de l'enregistrement"
+                            saveSuccessMessage = saveFile(
+                                context, weekMeals, exportFormat, displayedWeek
+                            ) { p -> saveProgress = p } ?: "Erreur lors de l'enregistrement"
                             showSaveSuccess = true
                             isSaving = false
                         }
@@ -272,9 +293,10 @@ private suspend fun createAndShare(
     format: String,
     sendToDietician: Boolean,
     email: String,
+    calendar: Calendar,
     onProgress: (Float) -> Unit = {}
 ) {
-    val file = createExportFile(context, weekMeals, format, onProgress) ?: return
+    val file = createExportFile(context, weekMeals, format, calendar, onProgress) ?: return
     shareFile(context, file, format)
     if (sendToDietician && email.isNotBlank()) {
         sendToDietician(context, file, format, email)
@@ -284,7 +306,9 @@ private suspend fun createAndShare(
 private fun generatePreviewBitmap(
     weekMeals: List<DayMeals>,
     context: Context,
-    format: String
+    format: String,
+    calendar: Calendar
+
 ): Bitmap? {
     val nonEmptyMeals = weekMeals.flatMap { dayMeals ->
         dayMeals.meals.filterNot { it.isVierge() }.map { dayMeals.day to it }
@@ -333,7 +357,7 @@ private fun generatePreviewBitmap(
 
     paint.textSize = 12f * density
     paint.typeface = Typeface.DEFAULT
-    canvas.drawText(getCurrentWeekInfo(), 15f * density, yPos, paint)
+    canvas.drawText(getCurrentWeekInfo(calendar), 15f * density, yPos, paint)
     yPos += 25f * density
 
     paint.strokeWidth = 1f * density
@@ -477,22 +501,22 @@ private suspend fun createExportFile(
     context: Context,
     weekMeals: List<DayMeals>,
     format: String,
+    calendar: Calendar,
     onProgress: (Float) -> Unit = {}
 ): File? = withContext(Dispatchers.IO) {
     try {
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-        val baseName = "FoodDiary_$timeStamp"
-        val exportDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "exports").apply { mkdirs() }
-
+        val weekNumber = calendar.get(Calendar.WEEK_OF_YEAR)
+        val baseName = "FoodDiary_${timeStamp}_semaine_$weekNumber"
         clearPreviousExports(context, baseName)
 
-        // Correction ici : forcer l'extension .jpg pour les images
         val fileExtension = if (format == "Image") "jpg" else format.lowercase()
+        val exportDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "exports").apply { mkdirs() }
         val file = File(exportDir, "$baseName.$fileExtension")
 
         when (format) {
-            "PDF" -> if (!createPdf(file, weekMeals, context, onProgress)) return@withContext null
-            "Image" -> if (!createImage(file, weekMeals, context, onProgress)) return@withContext null
+            "PDF" -> if (!createPdf(file, weekMeals, context, calendar, onProgress)) return@withContext null
+            "Image" -> if (!createImage(file, weekMeals, context, calendar, onProgress)) return@withContext null
             else -> return@withContext null
         }
 
@@ -516,6 +540,7 @@ private suspend fun createPdf(
     file: File,
     weekMeals: List<DayMeals>,
     context: Context,
+    calendar: Calendar,
     onProgress: (Float) -> Unit = {}
 ): Boolean = withContext(Dispatchers.IO) {
     try {
@@ -527,7 +552,7 @@ private suspend fun createPdf(
                         setTextAlignment(TextAlignment.CENTER)
                         setFontSize(18f).setBold().setMarginBottom(10f)
                     })
-                    document.add(Paragraph(getCurrentWeekInfo()).apply {
+                    document.add(Paragraph(getCurrentWeekInfo(calendar)).apply {
                         setTextAlignment(TextAlignment.CENTER)
                         setFontSize(12f).setMarginBottom(20f)
                     })
@@ -624,6 +649,7 @@ private suspend fun createImage(
     file: File,
     weekMeals: List<DayMeals>,
     context: Context,
+    calendar: Calendar,
     onProgress: (Float) -> Unit = {}
 ): Boolean = withContext(Dispatchers.IO) {
     try {
@@ -669,7 +695,7 @@ private suspend fun createImage(
             val canvas = Canvas(bitmap).apply { drawColor(Color.WHITE) }
 
             var yPos = margin
-            drawHeader(canvas, index, pages.size, margin, yPos, density)
+            drawHeader(canvas, index, pages.size, margin, yPos, density, calendar = calendar)
             yPos += (70 * density).toInt()
 
             yPos = drawTableHeader(canvas, margin, yPos, pageWidth, density)
@@ -777,7 +803,7 @@ private fun calculateTextHeight(text: String, paint: Paint, maxWidth: Float, lin
     } * lineHeight
 }
 
-private fun drawHeader(canvas: Canvas, pageIndex: Int, totalPages: Int, margin: Int, yPos: Int, density: Float) {
+private fun drawHeader(canvas: Canvas, pageIndex: Int, totalPages: Int, margin: Int, yPos: Int, density: Float, calendar: Calendar) {
     val titlePaint = Paint().apply {
         color = Color.BLACK
         textSize = 24f * density
@@ -786,7 +812,7 @@ private fun drawHeader(canvas: Canvas, pageIndex: Int, totalPages: Int, margin: 
     val textPaint = Paint(titlePaint).apply { textSize = 12f * density }
 
     canvas.drawText("Récapitulatif des repas", margin.toFloat(), yPos.toFloat(), titlePaint)
-    canvas.drawText(getCurrentWeekInfo(), margin.toFloat(), (yPos + 30 * density), textPaint)
+    canvas.drawText(getCurrentWeekInfo(calendar), margin.toFloat(), (yPos + 30 * density), textPaint)
     canvas.drawText("Page ${pageIndex + 1}/$totalPages", (595 * density - margin - 50 * density), (yPos + 30 * density), textPaint)
 }
 
@@ -967,11 +993,12 @@ private suspend fun saveFile(
     context: Context,
     weekMeals: List<DayMeals>,
     format: String,
+    calendar: Calendar,
     onProgress: (Float) -> Unit = {}
 ): String? = withContext(Dispatchers.IO) {
     try {
         // Créer le fichier temporaire
-        val tempFile = createExportFile(context, weekMeals, format, onProgress) ?: return@withContext null
+        val tempFile = createExportFile(context, weekMeals, format, calendar, onProgress) ?: return@withContext null
         val baseName = tempFile.nameWithoutExtension
         val mimeType = when (format) {
             "PDF" -> "application/pdf"

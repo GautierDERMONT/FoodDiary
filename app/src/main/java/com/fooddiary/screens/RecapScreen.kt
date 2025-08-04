@@ -37,15 +37,16 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecapScreen(
     navController: NavController,
     viewModel: MealViewModel
 ) {
+    val currentWeekOffset by viewModel.currentWeekOffset.collectAsStateWithLifecycle()
     val weekMeals by viewModel.weekMeals.collectAsStateWithLifecycle()
     var selectedMealType by remember { mutableStateOf<MealType?>(null) }
+
     val hasFilteredMeals = remember(weekMeals, selectedMealType) {
         weekMeals.any { dayMeals ->
             dayMeals.meals.any { meal ->
@@ -142,6 +143,7 @@ fun RecapScreen(
                             Column {
                                 DayHeader(
                                     day = dayMeals.day,
+                                    weekOffset = currentWeekOffset,
                                     onClick = { navController.navigate("dayMeals/${dayMeals.day}") }
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
@@ -206,7 +208,7 @@ private fun StableDayRecap(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .clickable { onMealClick(meal) },
-                            contentScale = ContentScale.Crop // Assure que l'image remplit complètement l'espace disponible
+                            contentScale = ContentScale.Crop
                         )
                     }
                 }
@@ -217,15 +219,17 @@ private fun StableDayRecap(
         }
     }
 }
+
 @Composable
 private fun DayHeader(
     day: String,
+    weekOffset: Int,
     onClick: () -> Unit
 ) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(60.dp) // Hauteur fixe
+            .height(60.dp)
             .padding(vertical = 4.dp),
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -240,7 +244,7 @@ private fun DayHeader(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = getFormattedDate(day),
+                text = getFormattedDate(day, weekOffset),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary
             )

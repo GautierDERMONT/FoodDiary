@@ -12,5 +12,7 @@ data class MealEntity(
     val type: MealType,
     val description: String,
     val photoUri: String?,
-    val notes: String?
+    val notes: String?,
+    val weekNumber: Int
+
 )

@@ -44,17 +44,32 @@ fun getWeekRange(): String {
     return "$startDate au $endDate"
 }
 
-fun getCurrentWeekInfo(): String {
-    return "Semaine ${getCurrentWeekNumber()} (${getWeekRange()})"
+// Dans DateUtils.kt
+fun getCurrentWeekInfo(calendar: Calendar): String {
+    val weekNumber = calendar.get(Calendar.WEEK_OF_YEAR)
+    return "Semaine $weekNumber (${getWeekRangeForCalendar(calendar)})"
 }
 
-fun getFormattedDate(dayShort: String): String {
+fun getWeekRangeForCalendar(calendar: Calendar): String {
+    val startCal = calendar.clone() as Calendar
+    startCal.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+
+    val endCal = calendar.clone() as Calendar
+    endCal.set(Calendar.DAY_OF_WEEK, Calendar.SUNDAY)
+
+    val startDate = SimpleDateFormat("d MMM", Locale.FRENCH).format(startCal.time)
+    val endDate = SimpleDateFormat("d MMM yyyy", Locale.FRENCH).format(endCal.time)
+
+    return "$startDate - $endDate"
+}
+
+
+fun getFormattedDate(dayShort: String, weekOffset: Int = 0): String {
     val calendar = Calendar.getInstance().apply {
         firstDayOfWeek = Calendar.MONDAY
-
+        add(Calendar.WEEK_OF_YEAR, weekOffset) // Ajout du décalage de semaine
 
         set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
-
 
         when (dayShort) {
             "Lun" -> {} // déjà à lundi
@@ -68,5 +83,4 @@ fun getFormattedDate(dayShort: String): String {
     }
 
     return SimpleDateFormat("EEEE d MMMM yyyy", Locale.FRENCH).format(calendar.time)
-
 }

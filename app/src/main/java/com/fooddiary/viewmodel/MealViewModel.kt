@@ -14,12 +14,8 @@ import com.fooddiary.model.MealType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import java.util.Calendar
+
 
 class MealViewModel(
     private val database: AppDatabase,
@@ -31,33 +27,60 @@ class MealViewModel(
     val dieticianEmail: StateFlow<String> = _dieticianEmail.asStateFlow()
 
     val weekDays = listOf("Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim")
+    private val _currentWeekOffset = MutableStateFlow(0)
+    val currentWeekOffset: StateFlow<Int> = _currentWeekOffset.asStateFlow()
 
-    val weekMeals: StateFlow<List<DayMeals>> = mealDao.getAllMeals()
-        .map { allMeals ->
-            weekDays.map { day ->
-                val dbMeals = allMeals
-                    .filter { it.day == day }
-                    .sortedBy { it.mealIndex }
-                    .map { it.toMeal() }
-                    .toMutableList()
+    companion object {
+        const val MAX_WEEK_OFFSET = 5
 
-                (0..2).forEach { index ->
-                    if (dbMeals.none { it.mealIndex == index }) {
-                        val type = when(index) {
-                            0 -> MealType.BREAKFAST
-                            1 -> MealType.LUNCH
-                            else -> MealType.DINNER
-                        }
-                        dbMeals.add(index, Meal(type, mealIndex = index))
-                    }
+        class Factory(
+            private val database: AppDatabase,
+            private val application: Application
+        ) : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                if (modelClass.isAssignableFrom(MealViewModel::class.java)) {
+                    return MealViewModel(database, application) as T
                 }
-
-                DayMeals(day = day, meals = dbMeals)
+                throw IllegalArgumentException("Unknown ViewModel class")
             }
         }
-        .flowOn(Dispatchers.Default)
-        .distinctUntilChanged()
-        .stateIn(viewModelScope, SharingStarted.Lazily, initialWeekMeals())
+    }
+
+    private val currentWeekNumber: Int
+        get() {
+            val calendar = Calendar.getInstance().apply {
+                add(Calendar.WEEK_OF_YEAR, _currentWeekOffset.value)
+            }
+            return calendar.get(Calendar.WEEK_OF_YEAR)
+        }
+
+    val weekMeals: StateFlow<List<DayMeals>> = currentWeekOffset.flatMapLatest { _ ->
+        mealDao.getAllMeals()
+            .map { allMeals ->
+                weekDays.map { day ->
+                    val dbMeals = allMeals
+                        .filter { it.day == day && it.weekNumber == currentWeekNumber }
+                        .sortedBy { it.mealIndex }
+                        .map { it.toMeal() }
+                        .toMutableList()
+
+                    (0..2).forEach { index ->
+                        if (dbMeals.none { it.mealIndex == index }) {
+                            val type = when(index) {
+                                0 -> MealType.BREAKFAST
+                                1 -> MealType.LUNCH
+                                else -> MealType.DINNER
+                            }
+                            dbMeals.add(index, Meal(type, mealIndex = index, day = day))
+                        }
+                    }
+
+                    DayMeals(day = day, meals = dbMeals)
+                }
+            }
+    }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.Lazily, weekDays.map { DayMeals(day = it, meals = mutableListOf()) })
 
     fun updateDieticianEmail(email: String) {
         viewModelScope.launch {
@@ -66,27 +89,9 @@ class MealViewModel(
         }
     }
 
-    private fun initialWeekMeals(): List<DayMeals> {
-        return weekDays.map { day ->
-            DayMeals(day = day, meals = mutableListOf())
-        }
-    }
-
-    fun removeViergeMeal(day: String, mealIndex: Int) {
-        viewModelScope.launch {
-            val meals = mealDao.getMealsByDay(day).first()
-            if (meals.size <= 3) return@launch
-
-            meals.firstOrNull { it.mealIndex == mealIndex && it.description.isEmpty() && it.photoUri == null }
-                ?.let { mealDao.delete(it) }
-
-            val remainingMeals = mealDao.getMealsByDay(day).first()
-            remainingMeals.forEachIndexed { newIndex, meal ->
-                if (meal.mealIndex != newIndex) {
-                    mealDao.insert(meal.copy(mealIndex = newIndex))
-                }
-            }
-        }
+    fun changeWeekOffset(offset: Int) {
+        val newOffset = offset.coerceIn(-MAX_WEEK_OFFSET, 0)
+        _currentWeekOffset.value = newOffset
     }
 
     fun clearAllData() {
@@ -95,16 +100,39 @@ class MealViewModel(
         }
     }
 
+    // Dans MealViewModel.kt
+    fun clearCurrentWeekData() {
+        viewModelScope.launch {
+            mealDao.deleteMealsByWeekNumber(currentWeekNumber)
+        }
+    }
+
+    fun clearAllWeeksData() {
+        viewModelScope.launch {
+            mealDao.deleteAllMeals()
+        }
+    }
+
+    fun hasPreviousWeekMeals(): Flow<Boolean> {
+        if (currentWeekOffset.value <= -MAX_WEEK_OFFSET) {
+            return flowOf(false)
+        }
+
+        val previousWeekNumber = Calendar.getInstance().apply {
+            add(Calendar.WEEK_OF_YEAR, currentWeekOffset.value - 1)
+        }.get(Calendar.WEEK_OF_YEAR)
+
+        return mealDao.getAllMeals()
+            .map { meals ->
+                meals.any { it.weekNumber == previousWeekNumber }
+            }
+    }
+
     fun addEmptyMeal(day: String) {
         viewModelScope.launch {
-            val existingMeals = mealDao.getMealsByDay(day).first()
+            val existingMeals = mealDao.getMealsByDayAndWeek(day, currentWeekNumber).first()
             if (existingMeals.none { it.description.isEmpty() && it.photoUri == null }) {
-                val usedIndices = existingMeals.map { it.mealIndex }.toSet()
-                var nextIndex = 3
-                while (nextIndex in usedIndices && nextIndex < 8) {
-                    nextIndex++
-                }
-
+                val nextIndex = (existingMeals.maxOfOrNull { it.mealIndex } ?: 2) + 1
                 if (nextIndex < 8) {
                     mealDao.insert(
                         MealEntity(
@@ -113,7 +141,8 @@ class MealViewModel(
                             type = MealType.CUSTOM,
                             description = "",
                             photoUri = null,
-                            notes = null
+                            notes = null,
+                            weekNumber = currentWeekNumber
                         )
                     )
                 }
@@ -123,18 +152,12 @@ class MealViewModel(
 
     fun removeLastViergeMeal(day: String) {
         viewModelScope.launch {
-            val existingMeals = mealDao.getMealsByDay(day).first()
-            val lastVierge = existingMeals
+            mealDao.getMealsByDayAndWeek(day, currentWeekNumber).first()
                 .filter { it.mealIndex >= 3 && it.description.isEmpty() && it.photoUri == null }
                 .maxByOrNull { it.mealIndex }
-
-            lastVierge?.let { mealDao.delete(it) }
+                ?.let { mealDao.delete(it) }
         }
     }
-
-    fun canAddMoreMeals(day: String): Flow<Boolean> = mealDao.getMealsByDay(day)
-        .map { it.size < 8 }
-        .flowOn(Dispatchers.Default)
 
     fun getMeal(day: String, mealIndex: Int): Meal? {
         return weekMeals.value
@@ -144,27 +167,14 @@ class MealViewModel(
 
     fun deleteMeal(day: String, mealIndex: Int) {
         viewModelScope.launch {
-            mealDao.deleteMealAt(day, mealIndex)
-            weekMeals.value
+            mealDao.deleteMealAt(day, currentWeekNumber, mealIndex)
         }
     }
 
-    val canRemoveVierge: StateFlow<Map<String, Boolean>> = mealDao.getAllMeals()
-        .map { allMeals ->
-            weekDays.associate { day ->
-                day to allMeals.any {
-                    it.day == day &&
-                            it.mealIndex >= 3 &&
-                            it.description.isEmpty() &&
-                            it.photoUri == null
-                }
-            }
-        }
-        .stateIn(viewModelScope, SharingStarted.Lazily, weekDays.associate { it to false })
-
     fun updateMeal(day: String, mealIndex: Int, meal: Meal) {
         viewModelScope.launch {
-            val existingMeal = mealDao.getMealsByDay(day).first().find { it.mealIndex == mealIndex }
+            val existingMeal = mealDao.getMealsByDayAndWeek(day, currentWeekNumber).first()
+                .find { it.mealIndex == mealIndex }
 
             if (existingMeal != null) {
                 mealDao.update(
@@ -183,11 +193,11 @@ class MealViewModel(
                         type = meal.type,
                         description = meal.description,
                         photoUri = meal.photoUri,
-                        notes = meal.notes
+                        notes = meal.notes,
+                        weekNumber = currentWeekNumber
                     )
                 )
             }
-            mealDao.getMealsByDay(day).first()
         }
     }
 
@@ -200,20 +210,5 @@ class MealViewModel(
             mealIndex = mealIndex,
             day = day
         )
-    }
-
-    companion object {
-        class Factory(
-            private val database: AppDatabase,
-            private val application: Application
-        ) : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                if (modelClass.isAssignableFrom(MealViewModel::class.java)) {
-                    return MealViewModel(database, application) as T
-                }
-                throw IllegalArgumentException("Unknown ViewModel class")
-            }
-        }
     }
 }

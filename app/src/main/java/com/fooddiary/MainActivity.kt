@@ -164,14 +164,16 @@ fun FoodDiaryApp(viewModel: MealViewModel) {
             }
         }
 
-        composable("export") {
+        composable("export/{weekOffset}") { backStackEntry ->
             Surface(
                 modifier = Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.background
             ) {
+                val weekOffset = backStackEntry.arguments?.getString("weekOffset")?.toIntOrNull() ?: 0
                 ExportScreen(
                     navController = navController,
-                    viewModel = viewModel
+                    viewModel = viewModel,
+                    weekOffset = weekOffset // Ajouté ici
                 )
             }
         }

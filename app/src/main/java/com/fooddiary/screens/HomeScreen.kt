@@ -26,11 +26,13 @@ import com.fooddiary.R
 import com.fooddiary.model.Meal
 import com.fooddiary.model.MealType
 import com.fooddiary.utils.getCurrentDayShort
+import com.fooddiary.utils.getWeekRangeForCalendar
 import com.fooddiary.viewmodel.MealViewModel
 import androidx.navigation.NavController
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowForward
+import java.util.Calendar
+
 
 @Composable
 fun HomeScreen(
@@ -44,10 +46,20 @@ fun HomeScreen(
     val currentDay = remember { getCurrentDayShort() }
     val jours = viewModel.weekDays
     val weekMeals by viewModel.weekMeals.collectAsState()
+    val hasPreviousMeals by viewModel.hasPreviousWeekMeals().collectAsState(initial = false)
+    val currentWeekOffset by viewModel.currentWeekOffset.collectAsState()
+    val displayedWeek by remember(currentWeekOffset) {
+        derivedStateOf {
+            val calendar = Calendar.getInstance().apply {
+                add(Calendar.WEEK_OF_YEAR, currentWeekOffset)
+                firstDayOfWeek = Calendar.MONDAY
+            }
+            calendar
+        }
+    }
 
     val mealsCount by remember(weekMeals) {
         derivedStateOf {
-
             weekMeals.associate { dayMeals ->
                 dayMeals.day to dayMeals.meals.count { !it.isVierge() }
             }
@@ -59,7 +71,6 @@ fun HomeScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 16.dp),
-
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Image(
@@ -70,10 +81,8 @@ fun HomeScreen(
                 .width(300.dp)
                 .height(200.dp)
                 .padding(bottom = 8.dp),
-
-        contentScale = ContentScale.Fit
+            contentScale = ContentScale.Fit
         )
-
 
         Row(
             modifier = Modifier
@@ -91,7 +100,10 @@ fun HomeScreen(
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             shape = CircleShape
                         )
-                        .clickable { navController.navigate("export") }
+                        .clickable {
+                            navController.navigate("export/${currentWeekOffset}") // Modifié ici
+                        }
+
                         .padding(8.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -106,7 +118,7 @@ fun HomeScreen(
                 Text(
                     "Export",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface // ou onBackground selon votre préférence
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
@@ -135,7 +147,7 @@ fun HomeScreen(
                 Text(
                     "Recap",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface // ou onBackground selon votre préférence
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
@@ -143,20 +155,40 @@ fun HomeScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 var showResetDialog by remember { mutableStateOf(false) }
+                var showFinalConfirmation by remember { mutableStateOf(false) }
+                var actionToConfirm by remember { mutableStateOf<(() -> Unit)?>(null) }
 
                 if (showResetDialog) {
                     AlertDialog(
                         onDismissRequest = { showResetDialog = false },
                         title = { Text("Confirmation") },
-                        text = { Text("Êtes-vous sûr de vouloir supprimer toutes les données ?") },
+                        text = { Text("Que souhaitez-vous supprimer ?") },
                         confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    viewModel.clearAllData()
-                                    showResetDialog = false
+                            Column {
+                                TextButton(
+                                    onClick = {
+                                        actionToConfirm = { viewModel.clearCurrentWeekData() }
+                                        showFinalConfirmation = true
+                                        showResetDialog = false
+                                    }
+                                ) {
+                                    Text(
+                                        "Semaine actuelle",
+                                        color = MaterialTheme.colorScheme.error
+                                    )
                                 }
-                            ) {
-                                Text("Confirmer", color = MaterialTheme.colorScheme.error)
+                                TextButton(
+                                    onClick = {
+                                        actionToConfirm = { viewModel.clearAllWeeksData() }
+                                        showFinalConfirmation = true
+                                        showResetDialog = false
+                                    }
+                                ) {
+                                    Text(
+                                        "Toutes les semaines",
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
                             }
                         },
                         dismissButton = {
@@ -169,7 +201,34 @@ fun HomeScreen(
                     )
                 }
 
-                Box(
+                if (showFinalConfirmation) {
+                    AlertDialog(
+                        onDismissRequest = { showFinalConfirmation = false },
+                        title = { Text("Confirmation finale") },
+                        text = { Text("Êtes-vous sûr de vouloir supprimer ces données ? Cette action est irréversible.") },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    actionToConfirm?.invoke()
+                                    showFinalConfirmation = false
+                                }
+                            ) {
+                                Text(
+                                    "Confirmer",
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = { showFinalConfirmation = false }
+                            ) {
+                                Text("Annuler", color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    )
+                }
+                    Box(
                     modifier = Modifier
                         .size(48.dp)
                         .background(
@@ -191,7 +250,7 @@ fun HomeScreen(
                 Text(
                     "Reset",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface // ou onBackground selon votre préférence
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
@@ -214,7 +273,62 @@ fun HomeScreen(
                 )
         )
 
-        Spacer(Modifier.height(24.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = {
+                    viewModel.changeWeekOffset(currentWeekOffset - 1)
+                },
+                modifier = Modifier.size(48.dp),
+                enabled = currentWeekOffset > -MealViewModel.MAX_WEEK_OFFSET && hasPreviousMeals
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "Semaine précédente",
+                    tint = if (currentWeekOffset > -MealViewModel.MAX_WEEK_OFFSET && hasPreviousMeals) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                    }
+                )
+            }
+
+            // Texte de la semaine
+            Text(
+                text = getWeekRangeForCalendar(displayedWeek),
+                style = MaterialTheme.typography.titleMedium.copy(
+                    color = MaterialTheme.colorScheme.onSurface
+                ),
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+
+            // Bouton semaine suivante
+            IconButton(
+                onClick = {
+                    viewModel.changeWeekOffset(currentWeekOffset + 1)
+                },
+                modifier = Modifier.size(48.dp),
+                enabled = currentWeekOffset < 0
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ArrowForward,
+                    contentDescription = "Semaine suivante",
+                    tint = if (currentWeekOffset < 0) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                    }
+                )
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
 
         Box(
             modifier = Modifier
@@ -350,7 +464,6 @@ fun ClickableMealBox(
             contentDescription = meal.type.name,
             modifier = Modifier.size(24.dp),
             colorFilter = null
-
         )
     }
 }
@@ -376,7 +489,6 @@ fun AddMealButton(
             imageVector = Icons.Default.Add,
             contentDescription = "Ajouter un repas",
             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-
         )
     }
 }
