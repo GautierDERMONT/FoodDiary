@@ -31,7 +31,7 @@ class MealViewModel(
     val currentWeekOffset: StateFlow<Int> = _currentWeekOffset.asStateFlow()
 
     companion object {
-        const val MAX_WEEK_OFFSET = 5
+        const val MAX_WEEK_OFFSET = 4
 
         class Factory(
             private val database: AppDatabase,

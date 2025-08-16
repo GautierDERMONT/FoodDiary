@@ -19,7 +19,7 @@ fun getCurrentDayShort(): String {
     }
 }
 
-// Ajoutez ces nouvelles fonctions à DateUtils.kt
+
 
 fun getCurrentWeekNumber(): Int {
     val calendar = Calendar.getInstance().apply {
